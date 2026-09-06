@@ -1,6 +1,6 @@
 # Forensics Capabilities
 
-NETRA-X provides deep forensic capabilities.
+Netra provides deep forensic capabilities.
 
 1. **PCAP Storage**: Raw packets are captured and rotated into 100MB chunks.
 2. **Community ID**: Every Zeek/Suricata alert is tagged with a Community ID hash.

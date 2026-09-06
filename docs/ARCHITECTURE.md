@@ -1,7 +1,7 @@
 # Architecture Document
 
 ## Overview
-NETRA-X follows a scalable, microservices-oriented architecture designed to handle high-throughput network telemetry and perform real-time AI inference.
+Netra follows a scalable, microservices-oriented architecture designed to handle high-throughput network telemetry and perform real-time AI inference.
 
 ## Components
 1. **Sensors**: Edge components responsible for reading network interfaces, parsing packets (Suricata, Zeek), and sending normalized JSON payloads.

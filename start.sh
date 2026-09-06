@@ -11,5 +11,5 @@ docker compose version
 docker info --format '{{.ServerVersion}}'
 [[ -f .env ]] || cp .env.example .env
 docker compose up --build --detach --wait --wait-timeout 180
-echo 'NETRA-X: http://localhost:3000'
+echo 'Netra: http://localhost:3000'
 echo 'API reference: http://localhost:8000/docs'

@@ -20,5 +20,5 @@ if ($LASTEXITCODE -ne 0) { throw 'Start Docker Desktop, then retry. Local altern
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 docker compose up --build --detach --wait --wait-timeout 180
 if ($LASTEXITCODE -ne 0) { throw 'Startup failed. Inspect docker compose logs.' }
-Write-Host 'NETRA-X: http://localhost:3000'
+Write-Host 'Netra: http://localhost:3000'
 Write-Host 'API reference: http://localhost:8000/docs'

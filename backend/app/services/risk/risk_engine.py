@@ -1,5 +1,5 @@
 """
-NETRA-X Risk Engine
+Netra Risk Engine
 Deterministic, explainable risk scoring with component breakdown.
 Risk = w1*anomaly + w2*forecast + w3*signature + w4*behavior + w5*graph + w6*criticality + w7*threat
 """

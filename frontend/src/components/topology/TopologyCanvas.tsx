@@ -47,5 +47,5 @@ export const TopologyCanvas: React.FC = () => {
     
   }, [nodes, edges, layoutMode]);
 
-  return <div ref={containerRef} id="cy" className="bg-gray-950 w-full h-full" />;
+  return <div ref={containerRef} id="cy" className="bg-slate-900 w-full h-full" />;
 };

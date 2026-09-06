@@ -16,7 +16,7 @@ export const useAppStore = create<AppState>((set) => ({
   sidebarCollapsed: false,
   activePage: '/',
   theme: 'dark',
-  platformName: 'NETRA-X',
+  platformName: 'Netra',
   performanceProfile: 'high',
   toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
   setActivePage: (page) => set({ activePage: page }),

@@ -1,17 +1,55 @@
-# Implementation ledger
+# Netra Implementation Status
 
-This ledger records verified delivery separately from the broader product specification. An entry becomes complete only after its checks pass. See [architecture](docs/ARCHITECTURE.md) for the frozen interfaces and [project state](PROJECT_STATE.md) for the latest validation.
+This document tracks the complete status of what is currently implemented in the Netra project versus what is left, organized by component.
 
-## Phase 0 — Architecture freeze
+## Backend
+- [x] Application structure (FastAPI)
+- [x] SQLite database schema and persistence logic
+- [x] In-process event bus and WebSockets for real-time updates
+- [x] Core API endpoints (REST)
+- [/] Risk and profiling services (skeleton/basic logic implemented)
+- [ ] Integration with advanced databases (TimescaleDB/PostgreSQL - files exist but currently offline)
 
-Decision: deliver an offline laptop application with React, FastAPI, an in-process event bus, SQLite persistence, passive sensor adapters, and explicit synthetic replay. PostgreSQL/TimescaleDB files from the initial scaffold are retained as migration references, not required runtime services. A two-container deployment avoids unnecessary database/queue overhead. All published ports bind to loopback by default.
+## Frontend
+- [x] Application layout and routing (React)
+- [x] Dashboard UI with TailwindCSS
+- [/] Topology graph visualization
+- [/] Forensics investigation view
+- [ ] Fully functional live WebSocket updates displaying ML predictions
 
-Data contract: sensor record → normalized event → observed flow → host/communication graph → evidence-backed detection → incident → recorded heuristic forecast → analyst investigation. Observed activity and estimated future activity remain distinguishable.
+## ML
+- [x] Machine Learning pipeline structure setup
+- [/] Risk Engine (Placeholder returning deterministic risk scores)
+- [/] Host Profiler Service (Basic heuristics)
+- [/] Baseline Engine (Simple thresholds)
+- [ ] Fully trained LSTM-based forecasting models
+- [ ] GNN implementation for lateral movement prediction
 
-## Phase 1 — Core application (in progress)
+## Sensor
+- [x] PCAP sensor capture logic
+- [x] Zeek log watcher integration
+- [x] Suricata EVE watcher integration
+- [x] Event Normalizer (Community ID)
+- [x] Sensor Health monitoring
 
-Parallel implementation: backend API/persistence, frontend working pages, sensor/ML correctness, deployment/documentation. Verification will cover empty telemetry, replay, invalid input, persistence, WebSockets, and frontend production compilation.
+## Demo
+- [x] Judge Mode Controller
+- [x] Demo Traffic Generator (simulated traffic)
+- [ ] Live traffic generation requiring root privileges (currently bypassed via simulated data)
 
-## Acceptance boundaries
+## Docs
+- [x] Architecture documentation (`ARCHITECTURE.md`)
+- [x] Demo guide (`DEMO.md`)
+- [x] Installation guide (`INSTALLATION.md`)
+- [x] API Reference (`API.md`)
+- [x] ML Pipeline (`ML_PIPELINE.md`)
+- [x] Forensics and Security docs
+- [x] Topology discovery doc
+- [x] SIH Judges guide (`SIH_JUDGES_GUIDE.md`)
 
-The requested enterprise vision also includes trained temporal/GNN models, calibrated multi-horizon forecasts, physical L2 infrastructure discovery, Arkime, eBPF, NetBox, IPFIX, honeypot redirection, multi-role access control, and large-scale storage. Those capabilities must not be described as delivered unless an actual implementation and its validation are recorded below. No external live sensor or VM is assumed present on the development laptop.
+## Tests
+- [x] Pytest skeleton and configuration
+- [/] Unit tests for Backend components
+- [/] Unit tests for ML pipeline placeholders
+- [ ] End-to-end integration tests
+- [ ] Frontend component tests

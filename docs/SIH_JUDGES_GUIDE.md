@@ -1,10 +1,10 @@
 # SIH Judges Guide
 
-## Welcome to NETRA-X
-NETRA-X solves Problem Statement 26153 by shifting the paradigm from *detection* to *forecasting*.
+## Welcome to Netra
+Netra solves Problem Statement 26153 by shifting the paradigm from *detection* to *forecasting*.
 
-## What Makes NETRA-X Different
-Traditional NDRs alert you *after* a lateral movement or exfiltration event has occurred. NETRA-X observes Reconnaissance and Initial Access, and uses ML to probabilistically forecast the exact host that will be targeted for Lateral Movement next.
+## What Makes Netra Different
+Traditional NDRs alert you *after* a lateral movement or exfiltration event has occurred. Netra observes Reconnaissance and Initial Access, and uses ML to probabilistically forecast the exact host that will be targeted for Lateral Movement next.
 
 ## Evaluation Checklist
 1. **Real-time Ingestion**: We natively integrate Zeek and Suricata logs.

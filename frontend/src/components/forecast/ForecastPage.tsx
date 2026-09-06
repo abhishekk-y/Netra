@@ -34,7 +34,7 @@ export const ForecastPage: React.FC = () => {
           <FastForward size={24} className="text-orange-500" />
           <div>
             <h1 className="text-lg font-bold text-gray-100">Active Attack Forecast</h1>
-            <p className="text-sm text-gray-400">NETRA-X AI has identified an unfolding attack path and predicts imminent lateral movement.</p>
+            <p className="text-sm text-gray-400">Netra AI has identified an unfolding attack path and predicts imminent lateral movement.</p>
           </div>
         </div>
         <div className="flex gap-2">

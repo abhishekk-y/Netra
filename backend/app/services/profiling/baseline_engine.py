@@ -1,5 +1,5 @@
 """
-NETRA-X Baseline Engine
+Netra Baseline Engine
 Learns and maintains behavioral baselines for every host over multiple time windows.
 """
 from __future__ import annotations

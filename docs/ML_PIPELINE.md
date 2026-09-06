@@ -1,7 +1,7 @@
 # Machine Learning Pipeline
 
 ## Overview
-NETRA-X utilizes a multi-stage ML pipeline to detect anomalies and forecast attacks.
+Netra utilizes a multi-stage ML pipeline to detect anomalies and forecast attacks.
 
 ## Pipeline Stages
 1. **Feature Extraction**: Network packets are summarized into flow records (duration, bytes in/out, packet inter-arrival times).

@@ -31,7 +31,7 @@ export const useTelemetryStore = create<TelemetryState>((set) => ({
 class WebSocketService {
   private ws: WebSocket | null = null;
   private reconnectTimer: number | null = null;
-  private url = `ws://${window.location.host}/ws`;
+  private url = `ws://localhost:8000/ws`;
   private backoff = 1000;
 
   connect() {

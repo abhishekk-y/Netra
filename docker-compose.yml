@@ -1,10 +1,13 @@
 services:
-  backend:
+  netra-backend:
+    labels:
+      - "app=netra"
+      - "component=backend"
     build:
       context: .
       dockerfile: docker/backend.Dockerfile
     environment:
-      APP_NAME: ${APP_NAME:-NETRA-X}
+      APP_NAME: ${APP_NAME:-Netra}
       NETRA_DB_PATH: /app/data/netra.db
       NETRA_SEED_DEMO: ${NETRA_SEED_DEMO:-false}
       NETRA_API_TOKEN: ${NETRA_API_TOKEN:-}
@@ -21,14 +24,17 @@ services:
       retries: 5
       start_period: 10s
     restart: unless-stopped
-  frontend:
+  netra-frontend:
+    labels:
+      - "app=netra"
+      - "component=frontend"
     build:
       context: .
       dockerfile: docker/frontend.Dockerfile
     ports:
       - "127.0.0.1:3000:8080"
     depends_on:
-      backend:
+      netra-backend:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/"]

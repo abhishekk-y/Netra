@@ -17,6 +17,15 @@
 - [x] Judge Mode Controller
 - [x] Tests skeleton
 
+## File Counts (approximate)
+- backend: 98
+- frontend: 46
+- ml: 32
+- sensor: 14
+- demo: 4
+- docs: 9
+- tests: 12
+
 ## Known Issues
 - Currently using simulated traffic for Judge Demo. Live traffic requires root privileges.
 - Machine Learning models are currently placeholders returning deterministic risk scores.
@@ -25,3 +34,4 @@
 - Implement fully functional Machine Learning models for LSTM-based forecasting.
 - Complete the React Frontend UI.
 - Finalize API implementations.
+

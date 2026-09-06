@@ -1,5 +1,5 @@
 """
-NETRA-X Host Profiler Service
+Netra Host Profiler Service
 Builds and maintains comprehensive profiles for every discovered host.
 """
 from __future__ import annotations

@@ -16,9 +16,6 @@ const navItems = [
   { path: '/hunting', label: 'Hunting', icon: Crosshair },
   { path: '/assets', label: 'Assets', icon: Server },
   { path: '/mitre', label: 'ATT&CK', icon: Map },
-  { path: '/dns', label: 'DNS', icon: Globe },
-  { path: '/tls', label: 'TLS', icon: Lock },
-  { path: '/deception', label: 'Deception', icon: Ghost },
   { path: '/health', label: 'Health', icon: HeartPulse },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
@@ -31,22 +28,21 @@ const MainLayout: React.FC = () => {
   }, []);
 
   return (
-    <div className="flex flex-col h-screen w-screen overflow-hidden bg-gray-950 text-gray-100">
-      <StatusBar />
+    <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-900 text-slate-100 font-sans">
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
         <aside 
-          className={`bg-gray-900 border-r border-gray-800 transition-all duration-200 flex flex-col ${sidebarCollapsed ? 'w-12' : 'w-48'}`}
+          className={`bg-slate-800 border-r border-slate-700 transition-all duration-200 flex flex-col ${sidebarCollapsed ? 'w-12' : 'w-48'}`}
         >
           <div 
-            className="h-12 flex items-center justify-center border-b border-gray-800 cursor-pointer hover:bg-gray-800 transition-colors"
+            className="h-12 flex items-center justify-center border-b border-slate-700 cursor-pointer hover:bg-slate-700 transition-colors"
             onClick={toggleSidebar}
             title="Toggle Sidebar"
           >
-            <span className={`font-mono font-bold text-sm text-emerald-500 ${sidebarCollapsed ? 'hidden' : 'block'}`}>
-              {platformName}
+            <span className={`font-mono font-bold text-lg text-cyan-400 ${sidebarCollapsed ? 'hidden' : 'block'}`}>
+              Netra
             </span>
-            {sidebarCollapsed && <ShieldAlert size={16} className="text-emerald-500" />}
+            {sidebarCollapsed && <ShieldAlert size={16} className="text-cyan-400" />}
           </div>
           
           <nav className="flex-1 overflow-y-auto py-2 custom-scrollbar">
@@ -56,7 +52,7 @@ const MainLayout: React.FC = () => {
                 to={item.path}
                 className={({ isActive }) => 
                   `flex items-center px-3 py-2 my-0.5 mx-2 rounded cursor-pointer transition-colors ${
-                    isActive ? 'bg-gray-800 text-emerald-400' : 'text-gray-400 hover:bg-gray-800/50 hover:text-gray-200'
+                    isActive ? 'bg-slate-700 text-cyan-400' : 'text-slate-400 hover:bg-slate-700/50 hover:text-slate-200'
                   }`
                 }
                 title={item.label}
@@ -69,10 +65,11 @@ const MainLayout: React.FC = () => {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+        <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative bg-slate-900">
           <Outlet />
         </main>
       </div>
+      <StatusBar />
     </div>
   );
 };

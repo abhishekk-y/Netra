@@ -3,7 +3,7 @@ from typing import Optional
 
 
 class Settings(BaseSettings):
-    APP_NAME: str = "NETRA-X"
+    APP_NAME: str = "Netra"
     APP_FULL_NAME: str = "Network Evolution, Threat Recognition & Attack Forecasting Intelligence System"
     
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/netrax"
