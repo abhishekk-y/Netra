@@ -1,0 +1,6 @@
+# Lean runnable local application. Model/sensor stacks have separate dependencies.
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30,<1
+pydantic>=2.9,<3
+psutil>=6,<8
+httpx>=0.27,<1

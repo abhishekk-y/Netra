@@ -1,0 +1,57 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-950 text-gray-100;
+  }
+}
+
+/* Custom scrollbar for dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0a0a0a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #262626;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #404040;
+}
+
+/* Monospace helpers */
+.font-mono {
+  font-family: 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+}
+
+/* Table styles */
+table {
+  border-collapse: collapse;
+}
+
+th {
+  @apply text-left text-xs font-semibold text-gray-400 bg-gray-900 border-b border-gray-800 p-2 whitespace-nowrap;
+}
+
+td {
+  @apply text-sm text-gray-100 border-b border-gray-800/50 p-2 whitespace-nowrap;
+}
+
+tr:hover td {
+  @apply bg-gray-800/30;
+}
+
+/* Cytoscape container */
+#cy {
+  width: 100%;
+  height: 100%;
+  display: block;
+}

@@ -1,0 +1,13 @@
+.git
+.venv
+.tmp
+**/node_modules
+**/dist
+**/__pycache__
+**/.pytest_cache
+**/*.db*
+.env
+evidence
+models
+datasets
+test-results
