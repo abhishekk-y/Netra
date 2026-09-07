@@ -1,4 +1,5 @@
-"""SQLite workbench. Detection and forecasting here are transparent heuristics.
+"""SQLite workbench. ML inference is used for risk scoring when the trained
+artifact is available. Detection rules are used as a secondary signal.
 
 Historical packet timestamps and ingestion timestamps are distinct. No telemetry
 is fabricated unless NETRA_SEED_DEMO=true is explicitly configured.
@@ -15,6 +16,13 @@ from pathlib import Path
 from threading import RLock
 from uuid import uuid4, uuid5, NAMESPACE_DNS
 from fastapi import HTTPException
+
+# ML inference (optional; gracefully degrades if model not loaded)
+try:
+    from app.ml_inference import predict_flow as _ml_predict_flow, get_model_status as _ml_status
+except ImportError:
+    def _ml_predict_flow(flow): return {'mlRiskScore': 5, 'mlAttackType': None, 'mlConfidence': 0.0, 'mlAnomalyScore': 0.0, 'mlAvailable': False}
+    def _ml_status(): return {'available': False}
 
 def now():
     return datetime.now(timezone.utc).isoformat()
@@ -107,10 +115,22 @@ class Store:
             hosts = {host["ip"]: host for host in self.all("hosts")}
             for entry in inputs:
                 timestamp = datetime.fromisoformat(entry.get("timestamp", now()).replace("Z", "+00:00")).astimezone(timezone.utc).isoformat()
-                flow = {**entry, "id": str(uuid4()), "timestamp": timestamp, "ingestedAt": now(), "riskScore": 5, "anomalyScore": .05,
+                # Run ML inference first
+                ml = _ml_predict_flow(entry)
+                ml_risk = ml.get('mlRiskScore', 5)
+                ml_attack = ml.get('mlAttackType')
+                ml_conf = ml.get('mlConfidence', 0.0)
+                ml_anomaly = ml.get('mlAnomalyScore', 0.0)
+
+                flow = {**entry, "id": str(uuid4()), "timestamp": timestamp, "ingestedAt": now(),
+                        "riskScore": ml_risk,
+                        "anomalyScore": ml_anomaly / 100,
+                        "mlConfidence": ml_conf,
+                        "mlAvailable": ml.get('mlAvailable', False),
+                        "attackType": ml_attack,
                         "appProtocol": {22:"SSH", 53:"DNS", 80:"HTTP", 443:"TLS", 445:"SMB", 3389:"RDP"}.get(entry["dstPort"], entry["protocol"]),
                         "source": entry.get("source", "ingested"), "synthetic": entry.get("source", "").startswith("demo"),
-                        "protocolEvidence": "Destination-port inference; payload protocol not verified"}
+                        "protocolEvidence": "ML-scored; destination-port inference for appProtocol"}
                 rule = None
                 moment = datetime.fromisoformat(timestamp)
                 same_source = [f for f in recent if f["srcIp"] == flow["srcIp"] and 0 <= (moment-datetime.fromisoformat(f["timestamp"])).total_seconds() <= 300]
@@ -216,7 +236,20 @@ class Store:
         import psutil
         disk_path = str(Path(self.path).resolve().parent) if self.path != ":memory:" else str(Path.cwd())
         usage = shutil.disk_usage(disk_path)
-        return {"status": "degraded", "components": {"database": "up", "capture": "down", "inference": "up"}, "metrics": {"cpu": psutil.cpu_percent(), "memory": psutil.virtual_memory().percent, "disk": round(usage.used/usage.total*100, 1)}, "mode": "local", "inferenceMethod": "heuristic-rules", "captureAvailable": False, "message": "API and heuristic analysis available. Capture is an external CLI; continuous sensor heartbeat is not implemented.", "database": "SQLite", "authentication": "bearer-token" if os.getenv("NETRA_API_TOKEN") else "none-local-only"}
+        ml_info = _ml_status()
+        inference_status = "ml-ensemble" if ml_info.get('available') else "heuristic-rules"
+        return {
+            "status": "operational" if ml_info.get('available') else "degraded",
+            "components": {"database": "up", "capture": "down", "mlInference": "up" if ml_info.get('available') else "unavailable"},
+            "metrics": {"cpu": psutil.cpu_percent(), "memory": psutil.virtual_memory().percent, "disk": round(usage.used/usage.total*100, 1)},
+            "mode": "local",
+            "inferenceMethod": inference_status,
+            "ml": ml_info,
+            "captureAvailable": False,
+            "message": f"API running. ML ensemble {'active' if ml_info.get('available') else 'not loaded — using heuristics'}. Capture sensor not configured.",
+            "database": "SQLite",
+            "authentication": "bearer-token" if os.getenv("NETRA_API_TOKEN") else "none-local-only"
+        }
 
     def telemetry(self):
         health = self.health()

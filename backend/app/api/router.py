@@ -4,7 +4,7 @@ from fastapi import APIRouter
 from .v1 import (
     auth, dashboard, hosts, topology, flows, alerts, incidents,
     forecasts, packets, dns, tls, assets, mitre, risk,
-    hunting, forensics, deception, health, settings,
+    hunting, forensics, deception, health, settings, ml,
 )
 
 api_router = APIRouter(prefix="/api/v1")
@@ -27,3 +27,4 @@ api_router.include_router(forensics.router)
 api_router.include_router(deception.router)
 api_router.include_router(health.router)
 api_router.include_router(settings.router)
+api_router.include_router(ml.router)

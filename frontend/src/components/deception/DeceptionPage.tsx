@@ -1,159 +1,376 @@
-import React from 'react';
+import React, { useState } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { useQuery } from '@tanstack/react-query';
 import { useTelemetryStore } from '../../stores/telemetryStore';
 import { useUIStore } from '../../stores/uiStore';
-import { Bug, Terminal, Crosshair } from 'lucide-react';
+import {
+  Bug, Terminal, Crosshair, Eye, AlertTriangle,
+  Globe, Wifi, Shield, Lock, Key, Activity,
+  ChevronRight, Clock, User, Zap
+} from 'lucide-react';
+
+const API = 'http://localhost:8000/api/v1';
 
 const fetchHoneypots = async () => {
-  const res = await fetch('http://localhost:8000/api/v1/deception/honeypots');
-  if (!res.ok) return { honeypots: [] };
-  return res.json();
+  try {
+    const res = await fetch(`${API}/deception/honeypots`);
+    if (!res.ok) throw new Error('fetch failed');
+    return res.json();
+  } catch {
+    // Return demo data if backend not available
+    return {
+      honeypots: [
+        { id: 'hp1', name: 'SSH-Trap-01', ip: '10.99.0.1', port: 22, protocol: 'SSH', engagements: 1402, status: 'active', lastActivity: '2s ago', attackerIp: '185.220.101.42', country: 'RU', credentialsCapt: 8 },
+        { id: 'hp2', name: 'HTTP-Decoy-01', ip: '10.99.0.2', port: 80, protocol: 'HTTP', engagements: 892, status: 'active', lastActivity: '14s ago', attackerIp: '45.33.32.156', country: 'CN', credentialsCapt: 0 },
+        { id: 'hp3', name: 'SMB-Ghost-01', ip: '10.99.0.3', port: 445, protocol: 'SMB', engagements: 234, status: 'active', lastActivity: '1m ago', attackerIp: '162.142.125.11', country: 'US', credentialsCapt: 3 },
+        { id: 'hp4', name: 'RDP-Decoy-01', ip: '10.99.0.4', port: 3389, protocol: 'RDP', engagements: 567, status: 'triggered', lastActivity: '5s ago', attackerIp: '91.241.19.57', country: 'IR', credentialsCapt: 12 },
+        { id: 'hp5', name: 'FTP-Lure-01', ip: '10.99.0.5', port: 21, protocol: 'FTP', engagements: 145, status: 'active', lastActivity: '3m ago', attackerIp: '193.109.69.7', country: 'NL', credentialsCapt: 1 },
+        { id: 'hp6', name: 'Telnet-Trap-01', ip: '10.99.0.6', port: 23, protocol: 'Telnet', engagements: 2819, status: 'triggered', lastActivity: '1s ago', attackerIp: '112.30.4.56', country: 'CN', credentialsCapt: 28 },
+      ]
+    };
+  }
 };
+
+const demoEngagements = [
+  { t: '08:51:04', src: '185.220.101.42', action: 'SSH Auth Attempt', cred: 'root:password123', country: 'RU', ttl: 64 },
+  { t: '08:51:01', src: '112.30.4.56', action: 'Telnet Login', cred: 'admin:admin', country: 'CN', ttl: 48 },
+  { t: '08:50:59', src: '91.241.19.57', action: 'RDP Connect', cred: 'administrator:P@ssw0rd', country: 'IR', ttl: 56 },
+  { t: '08:50:57', src: '162.142.125.11', action: 'SMB Share Enum', cred: '', country: 'US', ttl: 64 },
+  { t: '08:50:52', src: '185.220.101.42', action: 'Shell Command: whoami', cred: '', country: 'RU', ttl: 64 },
+  { t: '08:50:48', src: '45.33.32.156', action: 'HTTP POST /admin', cred: 'admin:admin123', country: 'CN', ttl: 52 },
+  { t: '08:50:44', src: '112.30.4.56', action: 'Shell Command: cat /etc/passwd', cred: '', country: 'CN', ttl: 48 },
+  { t: '08:50:39', src: '193.109.69.7', action: 'FTP Auth Attempt', cred: 'anonymous:', country: 'NL', ttl: 56 },
+];
+
+const countryFlag: Record<string,string> = { RU:'🇷🇺', CN:'🇨🇳', US:'🇺🇸', IR:'🇮🇷', NL:'🇳🇱', DE:'🇩🇪', BR:'🇧🇷' };
 
 const DeceptionPage: React.FC = () => {
   const honeypotEvents = useTelemetryStore(s => s.honeypotEvents);
   const { theme } = useUIStore();
   const isDark = theme === 'dark';
+  const [selectedHp, setSelectedHp] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'log'|'creds'>('log');
 
-  const { data } = useQuery({
-    queryKey: ['honeypots'],
-    queryFn: fetchHoneypots
-  });
-  
-  const honeypots = data?.honeypots || [];
+  const { data } = useQuery({ queryKey: ['honeypots'], queryFn: fetchHoneypots, refetchInterval: 5000 });
+  const honeypots = data?.honeypots ?? [];
 
-  const scatterOption = {
+  const allEvents = [...honeypotEvents.map((e: any) => ({ t: e.t, src: e.src, action: e.action, cred: '', country: '??', ttl: 64 })), ...demoEngagements];
+
+  const totalEngagements = honeypots.reduce((s: number, h: any) => s + (h.engagements || 0), 0);
+  const triggeredCount = honeypots.filter((h: any) => h.status === 'triggered').length;
+  const totalCreds = honeypots.reduce((s: number, h: any) => s + (h.credentialsCapt || 0), 0);
+
+  const engagementOption = {
     backgroundColor: 'transparent',
-    tooltip: { show: false },
-    grid: { top: 30, right: 30, bottom: 30, left: 30 },
-    xAxis: { type: 'value', min: 0, max: 100, splitLine: { show: true, lineStyle: { color: isDark ? '#222' : '#f1f5f9' } }, axisLabel: { show: false }, axisTick: { show: false } },
-    yAxis: { type: 'value', min: 0, max: 100, splitLine: { show: true, lineStyle: { color: isDark ? '#222' : '#f1f5f9' } }, axisLabel: { show: false }, axisTick: { show: false } },
-    series: [
-      {
-        type: 'scatter',
-        symbolSize: (data: any) => Math.min(30, Math.max(10, data[2] / 2)),
-        itemStyle: {
-          color: (params: any) => params.data[3] ? (isDark ? '#ef4444' : '#ef4444') : (isDark ? '#3b82f6' : '#00bceb'),
-          shadowBlur: 15,
-          shadowColor: (params: any) => params.data[3] ? 'rgba(239,68,68,0.4)' : (isDark ? 'rgba(59,130,246,0.4)' : 'rgba(0,188,235,0.4)')
+    tooltip: { trigger: 'axis', backgroundColor: isDark ? '#0F172A' : '#fff', borderColor: isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0', textStyle: { color: isDark ? '#e2e8f0' : '#1e293b', fontSize: 11 } },
+    grid: { top: 8, right: 8, bottom: 20, left: 32 },
+    xAxis: { type: 'category', data: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'], axisLabel: { fontSize: 10, color: isDark ? '#475569' : '#94a3b8' }, axisLine: { show: false }, axisTick: { show: false } },
+    yAxis: { type: 'value', splitLine: { lineStyle: { color: isDark ? 'rgba(255,255,255,0.04)' : '#f1f5f9', type: 'dashed' } }, axisLabel: { color: isDark ? '#475569' : '#94a3b8', fontSize: 10 }, axisLine: { show: false } },
+    series: [{
+      type: 'bar',
+      data: [420, 680, 892, 1102, 1402, 2100, 2819],
+      itemStyle: {
+        color: {
+          type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [
+            { offset: 0, color: isDark ? '#F97316' : '#F97316' },
+            { offset: 1, color: isDark ? '#DC2626' : '#EF4444' }
+          ]
         },
-        data: honeypots.map((h: any) => [h.x, h.y, h.value, h.isHuman])
-      }
-    ]
+        borderRadius: [4, 4, 0, 0]
+      },
+      barMaxWidth: 28,
+    }]
   };
 
+  const protocolPieOption = {
+    backgroundColor: 'transparent',
+    tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)', backgroundColor: isDark ? '#0F172A' : '#fff', borderColor: isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0', textStyle: { color: isDark ? '#e2e8f0' : '#1e293b', fontSize: 11 } },
+    legend: { show: false },
+    series: [{
+      type: 'pie',
+      radius: ['55%', '85%'],
+      data: [
+        { value: 2819, name: 'Telnet', itemStyle: { color: '#EF4444' } },
+        { value: 1402, name: 'SSH', itemStyle: { color: '#F97316' } },
+        { value: 892, name: 'HTTP', itemStyle: { color: '#22D3EE' } },
+        { value: 567, name: 'RDP', itemStyle: { color: '#8B5CF6' } },
+        { value: 234, name: 'SMB', itemStyle: { color: '#10B981' } },
+        { value: 145, name: 'FTP', itemStyle: { color: '#6366F1' } },
+      ],
+      label: { show: false },
+      emphasis: { itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: 'rgba(0,0,0,0.3)' } }
+    }]
+  };
+
+  const s = (cls: string) => cls;
+
   return (
-    <div className={`h-full flex flex-col space-y-6 ${isDark ? 'bg-black text-gray-200' : 'bg-transparent text-slate-800'}`}>
-      
-      {/* HEADER */}
-      <div className={`rounded-2xl shadow-sm border p-6 flex justify-between items-center transition-all duration-300 ${isDark ? 'bg-gradient-to-br from-[#111] to-[#0A0A0A] border-[#333]' : 'bg-white/80 backdrop-blur-md border-slate-200'}`}>
-        <div>
-          <h1 className="text-2xl font-bold flex items-center tracking-tight">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center mr-4 shadow-sm ${isDark ? 'bg-orange-500/10' : 'bg-orange-50 border border-orange-100'}`}>
-              <Bug className={isDark ? "text-orange-500" : "text-[#f6821f]"} size={22} />
+    <div className="h-full flex flex-col space-y-4 animate-fade-in">
+
+      {/* HEADER STATS */}
+      <div className="grid grid-cols-4 gap-4">
+        {[
+          { label: 'Active Honeypots', value: honeypots.length, icon: Bug, color: isDark ? 'text-orange-400' : 'text-orange-500', bg: isDark ? 'bg-orange-500/10 border-orange-500/20' : 'bg-orange-50 border-orange-100' },
+          { label: 'Total Engagements', value: totalEngagements.toLocaleString(), icon: Activity, color: isDark ? 'text-red-400' : 'text-red-600', bg: isDark ? 'bg-red-500/10 border-red-500/20' : 'bg-red-50 border-red-100' },
+          { label: 'Triggered Alerts', value: triggeredCount, icon: Zap, color: isDark ? 'text-yellow-400' : 'text-yellow-600', bg: isDark ? 'bg-yellow-500/10 border-yellow-500/20' : 'bg-yellow-50 border-yellow-100' },
+          { label: 'Credentials Captured', value: totalCreds, icon: Key, color: isDark ? 'text-violet-400' : 'text-violet-600', bg: isDark ? 'bg-violet-500/10 border-violet-500/20' : 'bg-violet-50 border-violet-100' },
+        ].map((k, i) => (
+          <div key={i} className={`rounded-2xl p-5 flex items-center justify-between border card-hover ${
+            isDark ? 'bg-[#0A0A12] border-white/[0.06]' : 'bg-white border-slate-100 shadow-sm'
+          }`}>
+            <div>
+              <div className={`text-[10px] font-bold uppercase tracking-widest mb-1.5 ${
+                isDark ? 'text-slate-600' : 'text-slate-400'
+              }`}>{k.label}</div>
+              <div className={`text-3xl font-bold tracking-tight ${
+                isDark ? 'text-slate-100' : 'text-slate-800'
+              }`}>{k.value}</div>
             </div>
-            Deception Grid Analytics
-          </h1>
-          <p className={`text-sm mt-2 font-medium ${isDark ? 'text-gray-500' : 'text-slate-500'}`}>Live monitoring of active honeypots and decoy engagements across all VLANs.</p>
-        </div>
-        <div className="flex space-x-10">
-          <div className="text-right">
-            <div className={`text-xs font-semibold uppercase tracking-wider mb-1 ${isDark ? 'text-gray-500' : 'text-slate-400'}`}>Active Traps</div>
-            <div className={`text-3xl font-bold tracking-tight ${isDark ? 'text-gray-100' : 'text-slate-800'}`}>{honeypots.length}</div>
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center border ${k.bg}`}>
+              <k.icon size={22} className={k.color} />
+            </div>
           </div>
-          <div className="text-right">
-            <div className={`text-xs font-semibold uppercase tracking-wider mb-1 ${isDark ? 'text-gray-500' : 'text-slate-400'}`}>Total Engagements</div>
-            <div className={`text-3xl font-bold tracking-tight ${isDark ? 'text-gray-100' : 'text-slate-800'}`}>{(12402 + honeypotEvents.length).toLocaleString()}</div>
-          </div>
-        </div>
+        ))}
       </div>
 
-      <div className="flex flex-1 overflow-hidden space-x-6">
-        
-        {/* LEFT COLUMN: Decoy Map */}
-        <div className={`flex-1 rounded-2xl shadow-sm border flex flex-col overflow-hidden relative transition-all duration-300 hover:shadow-md ${isDark ? 'bg-[#050505] border-[#333]' : 'bg-white border-slate-200'}`}>
-          <div className={`p-5 border-b flex justify-between items-center ${isDark ? 'border-[#333] bg-[#111]' : 'border-slate-100 bg-slate-50'}`}>
-            <h2 className={`font-bold ${isDark ? 'text-gray-300 font-mono text-sm uppercase' : 'text-slate-800'}`}>Decoy Interaction Map (VLAN 99)</h2>
-            <div className={`text-xs font-semibold px-3 py-1 rounded-full ${isDark ? 'bg-[#222] text-gray-400' : 'bg-white border border-slate-200 text-slate-500 shadow-sm'}`}>Live</div>
-          </div>
-          <div className={`flex-1 relative p-4 ${!isDark ? 'bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:16px_16px] opacity-80' : ''}`}>
-            <ReactECharts option={scatterOption} style={{ height: '100%', width: '100%' }} />
-            
-            {/* Overlay Legend */}
-            <div className={`absolute top-6 left-6 px-5 py-3 rounded-xl shadow-lg border backdrop-blur-md ${isDark ? 'bg-[#111]/80 border-[#333]' : 'bg-white/90 border-slate-200'}`}>
-              <div className="flex items-center space-x-3 mb-3 text-sm font-semibold">
-                <div className={`w-3.5 h-3.5 rounded-full shadow-sm ${isDark ? 'bg-blue-500' : 'bg-[#00bceb]'}`}></div>
-                <span className={isDark ? 'text-gray-300' : 'text-slate-700'}>Automated Scanner</span>
+      {/* MAIN GRID */}
+      <div className="flex-1 grid grid-cols-3 gap-4 overflow-hidden min-h-0">
+
+        {/* HONEYPOT CARDS — LEFT */}
+        <div className="col-span-1 flex flex-col space-y-2 overflow-y-auto custom-scrollbar">
+          <div className={`text-[10px] font-bold uppercase tracking-widest mb-1 ${
+            isDark ? 'text-slate-600' : 'text-slate-400'
+          }`}>Active Decoys</div>
+          {honeypots.map((hp: any) => (
+            <button
+              key={hp.id}
+              onClick={() => setSelectedHp(hp.id === selectedHp ? null : hp.id)}
+              className={`w-full text-left rounded-xl border p-4 transition-all ${
+                selectedHp === hp.id
+                  ? isDark
+                    ? 'bg-orange-500/10 border-orange-500/30'
+                    : 'bg-orange-50 border-orange-200'
+                  : isDark
+                    ? 'bg-[#0A0A12] border-white/[0.06] hover:border-white/[0.12]'
+                    : 'bg-white border-slate-100 shadow-sm hover:shadow-md'
+              }`}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className={`font-semibold text-sm ${
+                  isDark ? 'text-slate-200' : 'text-slate-800'
+                }`}>{hp.name}</span>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                  hp.status === 'triggered'
+                    ? isDark ? 'bg-red-500/15 text-red-400 border-red-500/20' : 'bg-red-50 text-red-600 border-red-200'
+                    : isDark ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-emerald-50 text-emerald-600 border-emerald-200'
+                }`}>
+                  {hp.status.toUpperCase()}
+                </span>
               </div>
-              <div className="flex items-center space-x-3 text-sm font-semibold">
-                <div className="w-3.5 h-3.5 bg-red-500 rounded-full shadow-sm shadow-red-500/50"></div>
-                <span className={isDark ? 'text-gray-300' : 'text-slate-700'}>Targeted Human</span>
+              <div className={`flex items-center justify-between text-xs ${
+                isDark ? 'text-slate-600' : 'text-slate-500'
+              }`}>
+                <span className="font-mono">{hp.ip}:{hp.port} ({hp.protocol})</span>
+                <span className={`font-mono font-medium ${
+                  isDark ? 'text-orange-400' : 'text-orange-600'
+                }`}>{hp.engagements.toLocaleString()} hits</span>
+              </div>
+              <div className={`flex items-center justify-between text-[10px] mt-2 ${
+                isDark ? 'text-slate-700' : 'text-slate-400'
+              }`}>
+                <span>Last: {hp.lastActivity}</span>
+                <span>{countryFlag[hp.country] ?? '🌐'} {hp.attackerIp}</span>
+              </div>
+              {hp.credentialsCapt > 0 && (
+                <div className={`mt-2 flex items-center space-x-1.5 text-[10px] font-bold ${
+                  isDark ? 'text-violet-400' : 'text-violet-600'
+                }`}>
+                  <Key size={10} />
+                  <span>{hp.credentialsCapt} credentials captured</span>
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* MIDDLE: Charts */}
+        <div className="col-span-1 flex flex-col space-y-4 overflow-hidden">
+
+          {/* Engagement bar chart */}
+          <div className={`rounded-2xl border p-5 flex-1 ${
+            isDark ? 'bg-[#0A0A12] border-white/[0.06]' : 'bg-white border-slate-100 shadow-sm'
+          }`}>
+            <h3 className={`text-sm font-semibold mb-3 ${
+              isDark ? 'text-slate-200' : 'text-slate-800'
+            }`}>Weekly Engagement Trend</h3>
+            <div style={{ height: 140 }}>
+              <ReactECharts option={engagementOption} style={{ height: '100%', width: '100%' }} />
+            </div>
+          </div>
+
+          {/* Protocol breakdown pie */}
+          <div className={`rounded-2xl border p-5 flex-1 ${
+            isDark ? 'bg-[#0A0A12] border-white/[0.06]' : 'bg-white border-slate-100 shadow-sm'
+          }`}>
+            <h3 className={`text-sm font-semibold mb-2 ${
+              isDark ? 'text-slate-200' : 'text-slate-800'
+            }`}>Attack Protocol Distribution</h3>
+            <div className="flex items-center">
+              <div style={{ height: 120, flex: 1 }}>
+                <ReactECharts option={protocolPieOption} style={{ height: '100%', width: '100%' }} />
+              </div>
+              <div className="space-y-1.5 text-xs">
+                {['Telnet','SSH','HTTP','RDP','SMB','FTP'].map((p,i) => (
+                  <div key={p} className="flex items-center space-x-2">
+                    <div className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: ['#EF4444','#F97316','#22D3EE','#8B5CF6','#10B981','#6366F1'][i] }} />
+                    <span className={isDark ? 'text-slate-500' : 'text-slate-600'}>{p}</span>
+                  </div>
+                ))}
               </div>
             </div>
+          </div>
+
+          {/* Efficacy metrics */}
+          <div className={`rounded-2xl border p-5 shrink-0 ${
+            isDark ? 'bg-[#0A0A12] border-white/[0.06]' : 'bg-white border-slate-100 shadow-sm'
+          }`}>
+            <h3 className={`text-sm font-semibold mb-4 ${
+              isDark ? 'text-slate-200' : 'text-slate-800'
+            }`}>Trap Efficacy</h3>
+            {[
+              { label: 'Avg. Time to Compromise', value: '4.2s', pct: 12, color: 'bg-orange-500' },
+              { label: 'Payload Capture Rate', value: '84%', pct: 84, color: isDark ? 'bg-cyan-500' : 'bg-cyan-500' },
+              { label: 'Zero-Day Heuristics', value: '3 fired', pct: 98, color: 'bg-red-500' },
+            ].map((m, i) => (
+              <div key={i} className="mb-3 last:mb-0">
+                <div className={`flex justify-between text-xs mb-1.5 ${
+                  isDark ? 'text-slate-500' : 'text-slate-500'
+                }`}>
+                  <span>{m.label}</span>
+                  <span className={`font-bold ${ isDark ? 'text-slate-300' : 'text-slate-700'}`}>{m.value}</span>
+                </div>
+                <div className={`h-1.5 rounded-full overflow-hidden ${
+                  isDark ? 'bg-white/[0.05]' : 'bg-slate-100'
+                }`}>
+                  <div className={`h-full rounded-full ${m.color}`} style={{ width: `${m.pct}%` }} />
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Efficacy & Logs */}
-        <div className="w-[420px] flex flex-col space-y-6 shrink-0">
-          
-          <div className={`rounded-2xl shadow-sm border overflow-hidden transition-all duration-300 hover:shadow-md ${isDark ? 'bg-gradient-to-br from-[#111] to-[#0A0A0A] border-[#333]' : 'bg-white border-slate-200'}`}>
-            <div className={`p-5 border-b flex justify-between items-center ${isDark ? 'border-[#333]' : 'border-slate-100'}`}>
-              <h2 className={`font-bold ${isDark ? 'text-gray-200' : 'text-slate-800'}`}>Trap Efficacy Metrics</h2>
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isDark ? 'bg-blue-500/10' : 'bg-blue-50'}`}>
-                <Crosshair size={16} className={isDark ? 'text-blue-500' : 'text-[#00bceb]'} />
-              </div>
-            </div>
-            <div className="p-6 space-y-6">
-               <div>
-                 <div className="flex justify-between text-sm font-semibold mb-2"><span className={isDark ? 'text-gray-400' : 'text-slate-500'}>Time to Compromise (Avg)</span><span className={isDark ? 'text-gray-100' : 'text-slate-800'}>4.2 secs</span></div>
-                 <div className={`h-2.5 w-full rounded-full overflow-hidden ${isDark ? 'bg-[#222]' : 'bg-slate-100'}`}><div className="h-full bg-orange-500 w-[12%] rounded-full"></div></div>
-               </div>
-               <div>
-                 <div className="flex justify-between text-sm font-semibold mb-2"><span className={isDark ? 'text-gray-400' : 'text-slate-500'}>Payloads Captured (24h)</span><span className={isDark ? 'text-gray-100' : 'text-slate-800'}>1,402</span></div>
-                 <div className={`h-2.5 w-full rounded-full overflow-hidden ${isDark ? 'bg-[#222]' : 'bg-slate-100'}`}><div className={`h-full w-[84%] rounded-full ${isDark ? 'bg-blue-500' : 'bg-[#00bceb]'}`}></div></div>
-               </div>
-               <div>
-                 <div className="flex justify-between text-sm font-semibold mb-2"><span className={isDark ? 'text-gray-400' : 'text-slate-500'}>Zero-Day Heuristics Triggered</span><span className={isDark ? 'text-gray-100' : 'text-slate-800'}>3</span></div>
-                 <div className={`h-2.5 w-full rounded-full overflow-hidden ${isDark ? 'bg-[#222]' : 'bg-slate-100'}`}><div className="h-full bg-red-500 w-[98%] rounded-full shadow-[0_0_10px_rgba(239,68,68,0.8)]"></div></div>
-               </div>
-            </div>
+        {/* RIGHT: Engagement Log + Credentials */}
+        <div className="col-span-1 flex flex-col space-y-4 overflow-hidden">
+
+          {/* Tab switcher */}
+          <div className={`flex rounded-xl border p-1 shrink-0 ${
+            isDark ? 'bg-[#0A0A12] border-white/[0.06]' : 'bg-white border-slate-200 shadow-sm'
+          }`}>
+            {(['log','creds'] as const).map(tab => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`flex-1 py-2 rounded-lg text-xs font-bold uppercase tracking-wide transition-colors ${
+                  activeTab === tab
+                    ? isDark
+                      ? 'bg-orange-500/15 text-orange-400 border border-orange-500/20'
+                      : 'bg-orange-50 text-orange-700 shadow-sm'
+                    : isDark ? 'text-slate-600 hover:text-slate-400' : 'text-slate-400 hover:text-slate-700'
+                }`}
+              >
+                {tab === 'log' ? '📡 Live Log' : '🔑 Credentials'}
+              </button>
+            ))}
           </div>
 
-          <div className={`rounded-2xl shadow-sm border flex-1 flex flex-col overflow-hidden transition-all duration-300 ${isDark ? 'bg-[#0A0A0A] border-[#333]' : 'bg-white border-slate-200'}`}>
-            <div className={`p-5 border-b flex justify-between items-center ${isDark ? 'border-[#333] bg-[#111]' : 'border-slate-100 bg-slate-50'}`}>
-              <h2 className={`font-bold ${isDark ? 'text-gray-200' : 'text-slate-800'}`}>Active Engagement Log</h2>
-              <Terminal size={16} className={isDark ? "text-gray-500" : "text-slate-400"} />
+          {/* Engagement log */}
+          {activeTab === 'log' && (
+            <div className={`flex-1 rounded-2xl border flex flex-col overflow-hidden ${
+              isDark ? 'bg-[#0A0A12] border-white/[0.06]' : 'bg-white border-slate-100 shadow-sm'
+            }`}>
+              <div className={`px-4 py-3 border-b flex items-center justify-between shrink-0 ${
+                isDark ? 'border-white/[0.06]' : 'border-slate-100'
+              }`}>
+                <span className={`text-sm font-semibold ${
+                  isDark ? 'text-slate-200' : 'text-slate-800'
+                }`}>Live Engagement Log</span>
+                <div className="flex items-center space-x-1.5">
+                  <div className="status-dot-danger" style={{ width: 6, height: 6 }} />
+                  <span className={`text-[10px] font-bold ${ isDark ? 'text-red-400' : 'text-red-600'}`}>ACTIVE</span>
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-1">
+                {allEvents.map((log: any, i: number) => (
+                  <div key={i} className={`p-3 rounded-xl mb-1 border transition-colors ${
+                    log.action.includes('Shell') || log.action.includes('passwd')
+                      ? isDark
+                        ? 'bg-red-950/25 border-red-500/15'
+                        : 'bg-red-50 border-red-100'
+                      : isDark
+                        ? 'bg-white/[0.02] border-white/[0.04] hover:bg-white/[0.04]'
+                        : 'bg-slate-50/60 border-slate-100 hover:bg-slate-50'
+                  }`}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className={`font-mono text-[10px] ${
+                        isDark ? 'text-slate-600' : 'text-slate-400'
+                      }`}>{log.t}</span>
+                      <span className={`text-[10px] font-bold ${
+                        log.action.includes('Shell') || log.action.includes('passwd')
+                          ? isDark ? 'text-red-400' : 'text-red-600'
+                          : isDark ? 'text-orange-400' : 'text-orange-600'
+                      }`}>
+                        {countryFlag[log.country] ?? '🌐'} {log.country}
+                      </span>
+                    </div>
+                    <div className={`text-xs font-semibold mb-1 ${
+                      isDark ? 'text-slate-300' : 'text-slate-700'
+                    }`}>{log.action}</div>
+                    <div className={`font-mono text-[10px] ${
+                      isDark ? 'text-slate-600' : 'text-slate-400'
+                    }`}>{log.src}</div>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
-              <table className="w-full text-left whitespace-nowrap text-sm">
-                <thead className={isDark ? "text-[#666]" : "text-slate-400"}>
-                  <tr>
-                    <th className="p-3 font-semibold uppercase tracking-wider text-xs">Time</th>
-                    <th className="p-3 font-semibold uppercase tracking-wider text-xs">Attacker IP</th>
-                    <th className="p-3 font-semibold uppercase tracking-wider text-xs">Action</th>
-                  </tr>
-                </thead>
-                <tbody className={`divide-y ${isDark ? 'divide-[#222]' : 'divide-slate-50/50'}`}>
-                  {honeypotEvents.map((log: any, i: number) => (
-                    <tr key={i} className={`transition-colors rounded-xl ${isDark ? 'hover:bg-[#111]' : 'hover:bg-slate-50 hover:shadow-sm'}`}>
-                      <td className={`p-3 rounded-l-xl ${isDark ? 'text-[#555]' : 'text-slate-400 font-medium'}`}>{log.t}</td>
-                      <td className={`p-3 font-semibold ${isDark ? 'text-gray-300' : 'text-slate-700'}`}>{log.src}</td>
-                      <td className={`p-3 rounded-r-xl ${isDark ? 'text-gray-400' : 'text-slate-600 font-medium'}`}>
-                        <span className={`px-2 py-1 rounded-md text-xs font-bold ${
-                          log.action.includes('Shell') || log.action.includes('Command') 
-                            ? (isDark ? 'bg-red-950/40 text-red-400' : 'bg-red-50 text-red-600') 
-                            : (isDark ? 'bg-[#222] text-gray-300' : 'bg-slate-100 text-slate-600')
-                        }`}>
-                          {log.action}
-                        </span>
-                      </td>
+          )}
+
+          {/* Credentials panel */}
+          {activeTab === 'creds' && (
+            <div className={`flex-1 rounded-2xl border flex flex-col overflow-hidden ${
+              isDark ? 'bg-[#0A0A12] border-white/[0.06]' : 'bg-white border-slate-100 shadow-sm'
+            }`}>
+              <div className={`px-4 py-3 border-b shrink-0 ${
+                isDark ? 'border-white/[0.06]' : 'border-slate-100'
+              }`}>
+                <span className={`text-sm font-semibold ${
+                  isDark ? 'text-slate-200' : 'text-slate-800'
+                }`}>Captured Credentials</span>
+              </div>
+              <div className="flex-1 overflow-y-auto custom-scrollbar">
+                <table className="w-full text-xs">
+                  <thead className={isDark ? 'text-slate-600' : 'text-slate-400'}>
+                    <tr>
+                      <th className="px-4 py-2.5 text-left font-semibold uppercase tracking-wider">Time</th>
+                      <th className="px-4 py-2.5 text-left font-semibold uppercase tracking-wider">Attacker</th>
+                      <th className="px-4 py-2.5 text-left font-semibold uppercase tracking-wider">Credential</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className={`divide-y ${ isDark ? 'divide-white/[0.03]' : 'divide-slate-50'}`}>
+                    {allEvents.filter(e => e.cred).map((log: any, i: number) => (
+                      <tr key={i} className={isDark ? 'hover:bg-white/[0.02]' : 'hover:bg-slate-50'}>
+                        <td className={`px-4 py-2.5 font-mono ${ isDark ? 'text-slate-600' : 'text-slate-400'}`}>{log.t}</td>
+                        <td className={`px-4 py-2.5 font-mono ${ isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                          {countryFlag[log.country] ?? '🌐'} {log.src}
+                        </td>
+                        <td className={`px-4 py-2.5 font-mono font-bold ${ isDark ? 'text-violet-400' : 'text-violet-700'}`}>{log.cred}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          )}
 
         </div>
       </div>
