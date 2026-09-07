@@ -1,124 +1,211 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { 
-  Activity, Share2, ActivitySquare, AlertTriangle, ShieldAlert, 
-  FastForward, Search, Crosshair, Server, Map, Settings,
-  LogOut, Bell, User
+  Activity, ShieldAlert, Network, Database, 
+  Terminal, Settings, Bell, Search, Cloud,
+  Eye, Bug, Play, Box, FileText, HeartPulse, Moon, Sun
 } from 'lucide-react';
-import { useAppStore } from '../stores/appStore';
 import { wsService } from '../stores/telemetryStore';
-
-const navItems = [
-  { path: '/', label: 'Dashboard', icon: Activity },
-  { path: '/topology', label: 'Topology', icon: Share2 },
-  { path: '/flows', label: 'Flows', icon: ActivitySquare },
-  { path: '/alerts', label: 'Alerts', icon: AlertTriangle },
-  { path: '/incidents', label: 'Incidents', icon: ShieldAlert },
-  { path: '/forecast', label: 'Forecast', icon: FastForward },
-  { path: '/packets', label: 'Packets', icon: Search },
-  { path: '/hunting', label: 'Hunting', icon: Crosshair },
-  { path: '/assets', label: 'Assets', icon: Server },
-  { path: '/mitre', label: 'ATT&CK', icon: Map },
-];
+import { useUIStore } from '../stores/uiStore';
 
 export const MainLayout: React.FC = () => {
-  const { platformName } = useAppStore();
   const location = useLocation();
+  const { theme, toggleTheme } = useUIStore();
 
-  React.useEffect(() => {
+  useEffect(() => {
     wsService.connect();
   }, []);
 
+  // Sync theme with document class
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+      document.body.className = "bg-[#000000] text-gray-400 font-mono antialiased overflow-hidden selection:bg-rose-500/30 selection:text-white";
+    } else {
+      document.documentElement.classList.remove('dark');
+      document.body.className = "bg-[#F4F6F8] text-slate-800 font-sans antialiased overflow-hidden selection:bg-blue-500/30 selection:text-blue-900";
+    }
+  }, [theme]);
+
+  const navGroups = [
+    {
+      group: 'Network Intelligence',
+      items: [
+        { path: '/', label: 'Overview', icon: Activity },
+        { path: '/topology', label: 'Topology map', icon: Network },
+      ]
+    },
+    {
+      group: 'Security & Threat',
+      items: [
+        { path: '/alerts', label: 'Detections', icon: ShieldAlert },
+        { path: '/incidents', label: 'Investigations', icon: FileText },
+        { path: '/mitre', label: 'ATT&CK Framework', icon: Box },
+        { path: '/forecast', label: 'AI Forecasting', icon: Eye },
+      ]
+    },
+    {
+      group: 'Deception',
+      items: [
+        { path: '/deception', label: 'Honeypots', icon: Bug },
+      ]
+    },
+    {
+      group: 'Forensics',
+      items: [
+        { path: '/flows', label: 'Traffic Logs', icon: Database },
+        { path: '/packets', label: 'Packet Inspection', icon: Terminal },
+        { path: '/hunting', label: 'Threat Hunt', icon: Search },
+        { path: '/forensics/replay', label: 'Event Replay', icon: Play },
+      ]
+    },
+    {
+      group: 'System',
+      items: [
+        { path: '/assets', label: 'Asset Inventory', icon: Database },
+        { path: '/health', label: 'System Health', icon: HeartPulse },
+        { path: '/settings', label: 'Configuration', icon: Settings },
+      ]
+    }
+  ];
+
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#0B0F19] text-[#9CA3AF] font-sans selection:bg-cyan-900 selection:text-white">
+    <div className={`flex h-screen w-screen overflow-hidden ${theme === 'dark' ? 'bg-[#000]' : 'bg-[#F4F6F8]'}`}>
       
-      {/* Sidebar - Inspired by Mockup 3 */}
-      <aside className="w-64 flex flex-col bg-[#0A0F1C] border-r border-[#1F2937] z-20">
+      {/* CRT OVERLAY (Only visible in dark mode) */}
+      {theme === 'dark' && (
+        <>
+          <div className="absolute inset-0 z-[9999] pointer-events-none mix-blend-overlay opacity-50" 
+               style={{ background: 'linear-gradient(to bottom, rgba(18,16,16,0) 50%, rgba(0,0,0,0.25) 50%)', backgroundSize: '100% 4px' }}></div>
+          <div className="absolute inset-0 z-[9998] pointer-events-none"
+               style={{ background: 'radial-gradient(circle, rgba(0,0,0,0) 60%, rgba(0,0,0,0.6) 100%)' }}></div>
+        </>
+      )}
+
+      {/* SIDEBAR */}
+      <aside className={`w-[260px] flex flex-col z-50 shrink-0 transition-colors ${
+        theme === 'dark' 
+          ? 'bg-[#050505] border-r border-[#333] shadow-[0_0_30px_rgba(0,0,0,0.9)]' 
+          : 'bg-slate-50/50 backdrop-blur-xl border-r border-slate-200 shadow-sm'
+      }`}>
         
         {/* Brand Header */}
-        <div className="h-16 flex items-center px-6 border-b border-[#1F2937]">
+        <div className={`h-20 flex items-center justify-between px-6 shrink-0 border-b ${
+          theme === 'dark' ? 'border-[#333] bg-[#0A0A0A]' : 'border-slate-200/60 bg-transparent'
+        }`}>
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-[0_0_15px_rgba(6,182,212,0.3)]">
-              <ShieldAlert size={18} className="text-white" />
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${theme === 'dark' ? 'bg-rose-500/20' : 'bg-gradient-to-br from-[#00bceb] to-indigo-500 shadow-sm shadow-[#00bceb]/30'}`}>
+              <Cloud size={18} className={theme === 'dark' ? 'text-rose-500' : 'text-white'} />
             </div>
-            <span className="font-bold text-lg text-white tracking-wide">
-              {platformName || 'Netra'}
+            <span className={`font-bold text-xl tracking-tight ${theme === 'dark' ? 'text-white font-mono uppercase' : 'text-slate-800 font-sans'}`}>
+              Netra<span className={theme === 'dark' ? 'text-rose-500' : 'text-indigo-500'}>X</span>
             </span>
           </div>
         </div>
 
-        {/* Nav Links */}
-        <nav className="flex-1 overflow-y-auto py-6 px-4 space-y-1 custom-scrollbar">
-          <div className="text-[10px] font-bold tracking-widest text-[#4B5563] mb-3 px-3 uppercase">General</div>
-          
-          {navItems.map((item) => {
-            const isActive = location.pathname === item.path;
-            return (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                className={`flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-                  isActive 
-                    ? 'bg-gradient-to-r from-cyan-500/20 to-transparent text-cyan-400' 
-                    : 'text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-[#111827]'
-                }`}
-              >
-                <item.icon size={18} className={`mr-3 ${isActive ? 'text-cyan-400' : 'text-[#6B7280]'}`} />
-                <span>{item.label}</span>
-              </NavLink>
-            );
-          })}
+        {/* Navigation List */}
+        <nav className="flex-1 overflow-y-auto custom-scrollbar pb-6 pt-6 px-4">
+          {navGroups.map((group, idx) => (
+            <div key={idx} className="mb-8">
+              <div className={`px-3 mb-3 text-[11px] font-bold uppercase tracking-widest ${
+                theme === 'dark' ? 'text-[#555]' : 'text-slate-400/80'
+              }`}>
+                {group.group}
+              </div>
+              <div className="space-y-1.5">
+                {group.items.map((item) => {
+                  const isActive = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
+                  return (
+                    <NavLink
+                      key={item.path}
+                      to={item.path}
+                      className={`flex items-center px-4 py-2.5 rounded-xl transition-all duration-300 group ${
+                        theme === 'dark' 
+                          ? (isActive ? 'bg-[#111] text-white border-l-2 border-rose-500 rounded-none' : 'text-[#888] hover:bg-[#111] hover:text-white')
+                          : (isActive ? 'bg-white text-indigo-600 shadow-sm shadow-indigo-100/50 font-semibold' : 'text-slate-500 hover:bg-white/60 hover:text-slate-800')
+                      }`}
+                    >
+                      <item.icon size={18} className={`${
+                        theme === 'dark' 
+                          ? (isActive ? 'text-rose-500' : 'text-[#555]') 
+                          : (isActive ? 'text-indigo-500' : 'text-slate-400 group-hover:text-slate-600')
+                      } shrink-0 transition-colors`} />
+                      <span className={`ml-3 text-sm ${theme === 'dark' ? 'uppercase text-[10px] tracking-widest' : ''}`}>{item.label}</span>
+                    </NavLink>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
-
-        {/* Bottom Sidebar Settings */}
-        <div className="p-4 border-t border-[#1F2937] space-y-1">
-          <NavLink to="/settings" className="flex items-center px-3 py-2.5 rounded-lg text-sm font-medium text-[#9CA3AF] hover:text-[#F3F4F6] hover:bg-[#111827] transition-all">
-            <Settings size={18} className="mr-3 text-[#6B7280]" />
-            Settings
-          </NavLink>
-          <button className="flex items-center w-full px-3 py-2.5 rounded-lg text-sm font-medium text-[#ef4444] hover:bg-[#ef4444]/10 transition-all">
-            <LogOut size={18} className="mr-3" />
-            Sign Out
-          </button>
-        </div>
       </aside>
 
-      {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative bg-[#0B0F19]">
+      {/* MAIN CONTENT AREA */}
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         
-        {/* Top Header Row (Pill buttons & Profile) */}
-        <header className="h-20 flex items-center justify-between px-8 z-10 pt-4 pb-2">
+        {/* HEADER */}
+        <header className={`h-20 flex items-center justify-between px-8 shrink-0 z-40 transition-colors ${
+          theme === 'dark' ? 'bg-[#0A0A0A] border-b border-[#333]' : 'bg-white/80 backdrop-blur-md border-b border-slate-200/60 shadow-sm'
+        }`}>
           
-          {/* Pill Navigation (Like Mockup 1 & 3) */}
-          <div className="flex bg-[#111827] rounded-full p-1 border border-[#1F2937] shadow-lg">
-            <button className="px-6 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 text-white text-sm font-medium rounded-full shadow-md">Dashboard</button>
-            <button className="px-6 py-2 text-[#9CA3AF] hover:text-white text-sm font-medium rounded-full transition-colors">Endpoints</button>
-            <button className="px-6 py-2 text-[#9CA3AF] hover:text-white text-sm font-medium rounded-full transition-colors">Findings</button>
-            <button className="px-6 py-2 text-[#9CA3AF] hover:text-white text-sm font-medium rounded-full transition-colors">Alerts</button>
+          <div className="flex items-center">
+            <div className={`text-xl font-semibold capitalize ${
+              theme === 'dark' ? 'text-gray-300 font-mono uppercase tracking-widest text-[14px]' : 'text-slate-800 font-sans'
+            }`}>
+              {location.pathname === '/' ? 'Platform Overview' : location.pathname.split('/')[1].replace('-', ' ')}
+            </div>
           </div>
 
-          {/* Right Header actions */}
-          <div className="flex items-center space-x-4">
-            <button className="w-10 h-10 rounded-full bg-[#111827] border border-[#1F2937] flex items-center justify-center text-[#9CA3AF] hover:text-white transition-colors">
-              <Bell size={18} />
+          <div className="flex items-center space-x-6">
+            
+            {/* THEME TOGGLE */}
+            <button 
+              onClick={toggleTheme}
+              className={`p-2 rounded-full transition-colors flex items-center justify-center ${
+                theme === 'dark' ? 'bg-[#111] text-yellow-500 border border-[#333] hover:bg-[#222]' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+              title="Toggle Intense Mode"
+            >
+              {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
             </button>
-            <button className="w-10 h-10 rounded-full bg-[#111827] border border-[#1F2937] flex items-center justify-center text-[#9CA3AF] hover:text-white transition-colors">
-              <Search size={18} />
-            </button>
-            <div className="flex items-center bg-[#111827] border border-[#1F2937] rounded-full p-1 pr-4 shadow-lg cursor-pointer hover:bg-[#1F2937] transition-colors">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center mr-3">
-                <User size={16} className="text-white" />
-              </div>
-              <span className="text-sm font-medium text-white">Analyst Team</span>
+
+            <div className="relative flex items-center">
+              <Search size={16} className={`absolute left-3 ${theme === 'dark' ? 'text-[#666]' : 'text-slate-400'}`} />
+              <input 
+                type="text" 
+                placeholder="Search IPs, domains, or rules..." 
+                className={`py-1.5 pl-9 pr-4 w-72 rounded-md focus:outline-none transition-all ${
+                  theme === 'dark' 
+                    ? 'bg-[#111] border border-[#333] text-gray-300 text-[10px] uppercase font-mono focus:border-rose-500' 
+                    : 'bg-slate-50 border border-slate-200 text-sm text-slate-700 focus:ring-2 focus:ring-[#00bceb]/20 focus:border-[#00bceb]'
+                }`}
+              />
             </div>
+            
+            <div className={`flex items-center space-x-2 px-3 py-1.5 rounded-md border ${
+              theme === 'dark' 
+                ? 'bg-[#111] border-[#333] text-[#888] font-mono text-[10px] uppercase' 
+                : 'bg-slate-50 border-slate-200 text-sm text-slate-600'
+            }`}>
+              <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981]"></div>
+              <span>Sensors Active</span>
+            </div>
+            
+            <button className={`relative transition-colors ${theme === 'dark' ? 'text-[#666] hover:text-white' : 'text-slate-400 hover:text-slate-700'}`}>
+              <Bell size={20} />
+              <div className="absolute top-0 right-0 w-2 h-2 bg-rose-500 border-2 border-transparent rounded-full"></div>
+            </button>
+            
           </div>
         </header>
 
-        {/* Page Content */}
-        <div className="flex-1 overflow-hidden relative z-0">
+        {/* SCROLLABLE PAGE CONTENT */}
+        <div className={`flex-1 overflow-auto relative ${theme === 'dark' ? 'p-0' : 'p-6'}`}>
           <Outlet />
         </div>
       </main>
     </div>
   );
 };
+
+export default MainLayout;

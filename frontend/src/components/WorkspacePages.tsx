@@ -115,7 +115,7 @@ export function TopologyPage() {
     const graph=query.data;
     const matches=new Set(graph.nodes.filter(n=>`${n.data.label} ${n.data.id} ${(hosts.data?.data||[]).find(h=>h.id===n.data.id)?.ip||''}`.toLowerCase().includes(search.toLowerCase())).map(n=>n.data.id));
     const nodes=graph.nodes.filter(n=>matches.has(n.data.id)); const edges=graph.edges.filter(e=>matches.has(e.data.source)&&matches.has(e.data.target)&&(scope==='all'||(scope==='risk' ? e.data.risk>=60 : e.data.isForecastPath)));
-    const instance=cytoscape({container:container.current,elements:[...nodes,...edges],layout:{name:layout,animate:false,padding:50},minZoom:0.15,maxZoom:4,style:[
+    const instance=cytoscape({container:container.current,elements:[...nodes,...edges],layout:{name:layout,animate:false,padding:50} as any,minZoom:0.15,maxZoom:4,style:[
       {selector:'node',style:{label:'data(label)','font-size':11,color:'#cbd5e1','text-valign':'bottom','text-margin-y':9,'background-color':'#0f2431','border-width':2,'border-color':'#34d399',width:34,height:34}},
       {selector:'node[risk >= 60]',style:{'border-color':'#fb923c','background-color':'#593628'}},
       {selector:'node[risk >= 80]',style:{'border-color':'#fb7185','background-color':'#5b2333'}},

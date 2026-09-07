@@ -14,7 +14,7 @@ export const AssetsPage: React.FC = () => {
   ];
 
   return (
-    <div className="flex flex-col h-full bg-gray-950">
+    <div className="flex flex-col h-full p-4 bg-transparent">
       <FilterBar placeholder="Search assets..." onSearch={setSearch} />
       <div className="flex-1 overflow-hidden">
         <DataTable

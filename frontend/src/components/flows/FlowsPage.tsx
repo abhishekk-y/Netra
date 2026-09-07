@@ -22,7 +22,7 @@ export const FlowsPage: React.FC = () => {
   }));
 
   return (
-    <div className="flex flex-col h-full bg-gray-950">
+    <div className="flex flex-col h-full p-4 bg-transparent">
       <FilterBar placeholder="Filter flows (e.g. ip.src == 192.168.1.1)..." onSearch={setSearch} />
       
       <div className="flex-1 overflow-hidden">

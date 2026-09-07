@@ -1,6 +1,6 @@
 import React from 'react';
 import { Panel } from '../common/Panel';
-import { Database, Cpu, Activity, HardDrive, Server, Globe } from 'lucide-react';
+import { Database, Cpu, Activity, HardDrive, Server, Globe, ShieldAlert } from 'lucide-react';
 import { useTelemetryStore } from '../../stores/telemetryStore';
 
 export const HealthPage: React.FC = () => {
@@ -16,11 +16,8 @@ export const HealthPage: React.FC = () => {
     { name: 'Message Broker', icon: Server, status: 'up', metrics: 'Queue: 0' },
   ];
 
-  // Need ShieldAlert for mock, falling back to Server if not imported, adding it locally
-  const ShieldAlert = Server; 
-
   return (
-    <div className="p-4 bg-gray-950 h-full overflow-auto custom-scrollbar">
+    <div className="p-4 bg-transparent h-full overflow-auto custom-scrollbar">
       <h1 className="text-xl font-bold text-gray-100 mb-6">System Health</h1>
       
       <div className="grid grid-cols-3 gap-4 mb-6">

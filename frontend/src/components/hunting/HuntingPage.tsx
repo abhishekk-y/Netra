@@ -13,7 +13,7 @@ export const HuntingPage: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-gray-950">
+    <div className="flex flex-col h-full p-4 bg-transparent">
       <FilterBar placeholder="Enter investigation query (e.g. protocol == 'ssh' and bytes > 1000)..." onSearch={() => {}} />
       
       <div className="flex-1 overflow-hidden p-2">

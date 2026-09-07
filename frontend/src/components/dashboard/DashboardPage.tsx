@@ -1,285 +1,207 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import ReactECharts from 'echarts-for-react';
 import { useTelemetryStore } from '../../stores/telemetryStore';
-import { Activity, ShieldAlert, Wifi, Globe, Lock, Cpu, Server } from 'lucide-react';
+import { useUIStore } from '../../stores/uiStore';
+import { AlertCircle, Activity, Server, Shield, Database, ArrowUpRight, Network, Terminal } from 'lucide-react';
 
-export const DashboardPage: React.FC = () => {
+const DashboardPage: React.FC = () => {
   const telemetry = useTelemetryStore();
-  const [timeSeriesData, setTimeSeriesData] = useState<{time: string, download: number, upload: number}[]>([]);
+  const { theme } = useUIStore();
+  const isDark = theme === 'dark';
+  
+  const terminalRef = useRef<HTMLDivElement>(null);
+  const packets = telemetry.packets;
 
-  // Simulate incoming ECharts data dynamically if telemetry updates
   useEffect(() => {
-    const interval = setInterval(() => {
-      setTimeSeriesData(prev => {
-        const now = new Date();
-        const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
-        
-        // Base traffic on simulated telemetry flows to make it "live"
-        const baseTraffic = telemetry.flowsPerSec > 0 ? telemetry.flowsPerSec / 100 : Math.random() * 5 + 5;
-        const newPoint = {
-          time: timeStr,
-          download: baseTraffic * (Math.random() * 0.5 + 0.8),
-          upload: (baseTraffic * 0.3) * (Math.random() * 0.5 + 0.8)
-        };
-        
-        const next = [...prev, newPoint];
-        if (next.length > 30) next.shift(); // Keep last 30 points
-        return next;
-      });
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [telemetry.flowsPerSec]);
+    if (terminalRef.current) {
+      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+    }
+  }, [packets]);
 
-  // Deep dark theme ECharts Config (Inspired by Mockup 1)
-  const trafficOption = {
+  const currentAnomaly = packets.length > 0 ? packets[0].risk : 0;
+  const isCritical = currentAnomaly > 75;
+
+  // Cloudflare/Cisco style Chart
+  const heroOption = {
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'axis', backgroundColor: '#0B0F19', borderColor: '#1F2937', textStyle: { color: '#F3F4F6' } },
-    legend: { data: ['Download', 'Upload'], textStyle: { color: '#9CA3AF' }, top: 0, right: 0 },
-    grid: { top: 40, right: 10, bottom: 30, left: 40 },
-    xAxis: { 
-      type: 'category', 
-      boundaryGap: false,
-      data: timeSeriesData.map(d => d.time), 
-      axisLine: { lineStyle: { color: '#1F2937' } },
-      axisLabel: { color: '#6B7280', fontFamily: 'JetBrains Mono', fontSize: 10 }
-    },
-    yAxis: { 
-      type: 'value', 
-      splitLine: { lineStyle: { color: '#111827', type: 'dashed' } },
-      axisLabel: { color: '#6B7280', fontFamily: 'JetBrains Mono', fontSize: 10, formatter: '{value} Gbps' }
-    },
+    tooltip: { trigger: 'axis', backgroundColor: '#fff', borderColor: '#e2e8f0', textStyle: { color: '#1e293b', fontSize: 12 } },
+    grid: { top: 20, right: 20, bottom: 20, left: 40, containLabel: false },
+    xAxis: { type: 'category', data: packets.slice().reverse().map((p: any) => p.time), axisLabel: { fontSize: 10, color: '#64748b' }, axisLine: { lineStyle: { color: '#cbd5e1' } }, splitLine: { show: true, lineStyle: { color: '#f1f5f9' } } },
+    yAxis: [
+      { type: 'value', max: 1500, splitLine: { lineStyle: { color: '#f1f5f9', type: 'solid' } }, axisLabel: { color: '#64748b', fontSize: 10 } },
+      { type: 'value', max: 100, splitLine: { show: false }, axisLabel: { show: false } }
+    ],
     series: [
-      { 
-        name: 'Download',
-        data: timeSeriesData.map(d => d.download.toFixed(2)), 
-        type: 'line', 
-        smooth: true,
-        showSymbol: false,
-        areaStyle: { 
+      {
+        name: 'Bandwidth (B)', type: 'line', smooth: true, yAxisIndex: 0,
+        itemStyle: { color: '#00bceb' }, lineStyle: { width: 2, color: '#00bceb' },
+        areaStyle: {
           color: {
             type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [{ offset: 0, color: 'rgba(6,182,212,0.4)' }, { offset: 1, color: 'rgba(6,182,212,0)' }]
+            colorStops: [{ offset: 0, color: 'rgba(0,188,235,0.2)' }, { offset: 1, color: 'rgba(0,188,235,0)' }]
           }
-        }, 
-        itemStyle: { color: '#06b6d4' },
-        lineStyle: { width: 2, shadowColor: 'rgba(6,182,212,0.5)', shadowBlur: 10 }
+        },
+        data: packets.slice().reverse().map((p: any) => p.len)
       },
-      { 
-        name: 'Upload',
-        data: timeSeriesData.map(d => d.upload.toFixed(2)), 
-        type: 'line', 
-        smooth: true,
-        showSymbol: false,
-        areaStyle: { 
-          color: {
-            type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
-            colorStops: [{ offset: 0, color: 'rgba(139,92,246,0.4)' }, { offset: 1, color: 'rgba(139,92,246,0)' }]
-          }
-        }, 
-        itemStyle: { color: '#8b5cf6' },
-        lineStyle: { width: 2, shadowColor: 'rgba(139,92,246,0.5)', shadowBlur: 10 }
+      {
+        name: 'AI Risk Score', type: 'line', step: 'middle', yAxisIndex: 1,
+        itemStyle: { color: '#f6821f' }, lineStyle: { width: 2, type: 'dashed', color: '#f6821f' }, 
+        data: packets.slice().reverse().map((p: any) => p.risk)
       }
     ]
   };
 
-  // Radial Risk Score Gauge (Inspired by Mockup 3)
-  const riskOption = {
-    series: [{
-      type: 'gauge',
-      startAngle: 180,
-      endAngle: 0,
-      min: 0,
-      max: 100,
-      radius: '100%',
-      center: ['50%', '75%'],
-      pointer: { show: false },
-      progress: {
-        show: true,
-        overlap: false,
-        roundCap: true,
-        clip: false,
-        itemStyle: {
-          color: {
-            type: 'linear', x: 0, y: 0, x2: 1, y2: 0,
-            colorStops: [{ offset: 0, color: '#06b6d4' }, { offset: 0.5, color: '#f59e0b' }, { offset: 1, color: '#ef4444' }]
-          }
-        }
-      },
-      axisLine: { lineStyle: { width: 14, color: [[1, '#111827']] } },
-      splitLine: { show: false },
-      axisTick: { show: false },
-      axisLabel: { show: false },
-      data: [{ value: telemetry.hostsCount > 0 ? 68.4 : 12.0, name: 'Risk Score' }],
-      title: { fontSize: 10, color: '#6B7280', offsetCenter: [0, '25%'] },
-      detail: { width: 50, height: 14, fontSize: 32, color: '#F3F4F6', offsetCenter: [0, '-10%'], formatter: '{value}%', fontFamily: 'JetBrains Mono' }
-    }]
-  };
-
   return (
-    <div className="p-4 md:p-6 h-full flex flex-col space-y-4 bg-[#0B0F19] overflow-y-auto custom-scrollbar">
+    <div className="h-full flex flex-col space-y-6">
       
-      {/* Top Bar / Stats Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-[#111827] rounded-xl p-4 border border-white/5 flex justify-between items-center shadow-lg">
-          <div>
-            <div className="text-[#6B7280] text-xs font-medium mb-1">TOTAL ENDPOINTS</div>
-            <div className="text-2xl font-mono text-white">{telemetry.hostsCount || 42} <span className="text-emerald-500 text-xs ml-2">▲ 6.4%</span></div>
-          </div>
-          <div className="w-10 h-10 rounded-full bg-cyan-500/10 flex items-center justify-center">
-            <Server size={20} className="text-cyan-500" />
-          </div>
+      {/* ALERT BANNER */}
+      <div className={`rounded-lg p-4 flex items-center justify-between transition-colors shadow-sm ${isCritical ? 'bg-red-50 border border-red-200' : 'bg-white border border-slate-200'}`}>
+        <div className="flex items-center space-x-3">
+          <AlertCircle size={20} className={isCritical ? 'text-red-500 animate-pulse' : 'text-slate-400'} />
+          <span className={`font-medium ${isCritical ? 'text-red-700' : 'text-slate-600'}`}>
+            {isCritical ? 'CRITICAL: High probability threat detected by ML Ensemble' : 'System Normal: No active threats detected.'}
+          </span>
         </div>
-        
-        <div className="bg-[#111827] rounded-xl p-4 border border-white/5 flex justify-between items-center shadow-lg">
-          <div>
-            <div className="text-[#6B7280] text-xs font-medium mb-1">NETWORK FLOWS/s</div>
-            <div className="text-2xl font-mono text-white">{telemetry.flowsPerSec || 1204} <span className="text-emerald-500 text-xs ml-2">▲ 3.2%</span></div>
-          </div>
-          <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center">
-            <Activity size={20} className="text-blue-500" />
-          </div>
-        </div>
-        
-        <div className="bg-[#111827] rounded-xl p-4 border border-white/5 flex justify-between items-center shadow-lg">
-          <div>
-            <div className="text-[#6B7280] text-xs font-medium mb-1">OPEN INCIDENTS</div>
-            <div className="text-2xl font-mono text-white">4 <span className="text-red-500 text-xs ml-2">▲ 1 High</span></div>
-          </div>
-          <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center">
-            <ShieldAlert size={20} className="text-red-500" />
-          </div>
-        </div>
-
-        <div className="bg-[#111827] rounded-xl p-4 border border-white/5 flex justify-between items-center shadow-lg">
-          <div>
-            <div className="text-[#6B7280] text-xs font-medium mb-1">SENSOR UPTIME</div>
-            <div className="text-2xl font-mono text-white">99.9%</div>
-          </div>
-          <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center">
-            <Wifi size={20} className="text-emerald-500" />
-          </div>
+        <div className="flex items-center space-x-4 text-sm font-medium">
+          <span className="text-slate-500">Live AI Confidence:</span>
+          <span className={`px-2 py-1 rounded text-white ${isCritical ? 'bg-red-500' : 'bg-emerald-500'}`}>
+            {currentAnomaly.toFixed(1)}%
+          </span>
         </div>
       </div>
 
-      {/* Main Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-[350px]">
-        
-        {/* Large Traffic Area Chart (Span 2) */}
-        <div className="bg-[#111827] rounded-xl border border-white/5 shadow-lg p-5 flex flex-col lg:col-span-2 relative overflow-hidden">
-          <div className="flex justify-between items-center mb-4 z-10">
-            <h3 className="text-white text-sm font-medium">Network Traffic (Bandwidth Usage)</h3>
-            <div className="flex space-x-2">
-              <span className="bg-white/5 text-gray-400 text-xs px-2 py-1 rounded">24H</span>
-              <span className="bg-cyan-500/20 text-cyan-400 text-xs px-2 py-1 rounded border border-cyan-500/30">LIVE</span>
+      {/* TOP ROW: KPIs */}
+      <div className="grid grid-cols-4 gap-6">
+        {[
+          { label: 'Active Connections', val: telemetry.activeConnections.toLocaleString(), icon: Activity, lightColor: 'text-[#00bceb]', darkColor: 'text-blue-500', lightBg: 'bg-blue-50', darkBg: 'bg-blue-500/10' },
+          { label: 'Ingress Rate', val: `${(telemetry.netIo / 1000).toFixed(1)}k PPS`, icon: Network, lightColor: 'text-indigo-500', darkColor: 'text-purple-500', lightBg: 'bg-indigo-50', darkBg: 'bg-purple-500/10' },
+          { label: 'Total Packets Scanned', val: '14.2B', icon: Database, lightColor: 'text-[#f6821f]', darkColor: 'text-orange-500', lightBg: 'bg-orange-50', darkBg: 'bg-orange-500/10' },
+          { label: 'Active Honeypots', val: '30', icon: Shield, lightColor: 'text-emerald-500', darkColor: 'text-emerald-500', lightBg: 'bg-emerald-50', darkBg: 'bg-emerald-500/10' }
+        ].map((k, i) => (
+          <div key={i} className={`rounded-2xl p-5 flex items-center justify-between transition-all duration-300 hover:-translate-y-1 ${
+            isDark ? 'bg-gradient-to-br from-[#111] to-[#0A0A0A] border border-[#333] hover:border-gray-600 hover:shadow-lg' 
+                   : 'bg-white border border-slate-100 shadow-sm hover:shadow-md hover:border-slate-200'
+          }`}>
+            <div>
+              <div className={`text-xs font-semibold uppercase tracking-wider mb-2 ${isDark ? 'text-gray-500' : 'text-slate-400'}`}>{k.label}</div>
+              <div className={`text-3xl font-bold tracking-tight ${isDark ? 'text-gray-100' : 'text-slate-800'}`}>{k.val}</div>
+            </div>
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${isDark ? k.darkBg : k.lightBg}`}>
+              <k.icon size={22} className={isDark ? k.darkColor : k.lightColor} />
             </div>
           </div>
-          <div className="flex-1 w-full min-h-[250px] z-10">
-            <ReactECharts option={trafficOption} style={{ height: '100%', width: '100%' }} />
-          </div>
-          {/* Subtle Glow Background */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3/4 h-3/4 bg-cyan-500/5 blur-[100px] pointer-events-none"></div>
-        </div>
-
-        {/* Risk Score Radial Gauge */}
-        <div className="bg-[#111827] rounded-xl border border-white/5 shadow-lg p-5 flex flex-col relative overflow-hidden">
-          <h3 className="text-white text-sm font-medium mb-2">Current Security Risk Score</h3>
-          <div className="flex-1 flex flex-col items-center justify-center z-10">
-             <div className="w-full h-48">
-               <ReactECharts option={riskOption} style={{ height: '100%', width: '100%' }} />
-             </div>
-             <div className="mt-4 text-xs text-[#9CA3AF] text-center px-4 leading-relaxed">
-               Failing security rating. Your systems are vulnerable, with multiple alerts requiring attention.
-             </div>
-          </div>
-        </div>
+        ))}
       </div>
 
-      {/* Tables Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="flex-1 grid grid-cols-3 gap-6 overflow-hidden">
         
-        {/* Alerts Table */}
-        <div className="bg-[#111827] rounded-xl border border-white/5 shadow-lg overflow-hidden flex flex-col">
-          <div className="p-4 border-b border-white/5 flex justify-between items-center">
-            <h3 className="text-white text-sm font-medium">Top 5 Open Alerts by Severity</h3>
-            <div className="relative">
-              <input type="text" placeholder="Search Alerts" className="bg-[#0B0F19] text-xs text-white border border-white/10 rounded px-3 py-1.5 focus:outline-none focus:border-cyan-500" />
+        {/* LEFT COLUMN: Main Chart & Metrics */}
+        <div className="col-span-2 flex flex-col space-y-6 overflow-hidden">
+          
+          <div className={`rounded-2xl shadow-sm border p-5 flex-1 flex flex-col min-h-[300px] ${
+            isDark ? 'bg-gradient-to-br from-[#111] to-[#0A0A0A] border-[#333]' : 'bg-white border-slate-100'
+          }`}>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-slate-800'}`}>Traffic Volume vs. AI Risk Forecasting</h2>
+              <button className={`text-sm font-medium flex items-center hover:underline ${isDark ? 'text-blue-400' : 'text-[#00bceb]'}`}>View Report <ArrowUpRight size={16} className="ml-1"/></button>
+            </div>
+            <div className="flex-1 w-full relative">
+               <ReactECharts option={heroOption} style={{ height: '100%', width: '100%' }} />
             </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-[#0B0F19] text-[#6B7280]">
-                <tr>
-                  <th className="py-3 px-4 font-medium uppercase tracking-wider">Alert Name</th>
-                  <th className="py-3 px-4 font-medium uppercase tracking-wider">Source IP</th>
-                  <th className="py-3 px-4 font-medium uppercase tracking-wider">Severity</th>
-                  <th className="py-3 px-4 font-medium uppercase tracking-wider">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {[
-                  { name: 'Brute Force Attempt', ip: '192.168.1.45', sev: 'Critical', color: 'text-red-400 bg-red-400/10 border-red-400/20' },
-                  { name: 'Suspicious Lateral Move', ip: '10.0.0.5', sev: 'High', color: 'text-orange-400 bg-orange-400/10 border-orange-400/20' },
-                  { name: 'Malware Beaconing', ip: '192.168.56.20', sev: 'High', color: 'text-orange-400 bg-orange-400/10 border-orange-400/20' },
-                  { name: 'Unusual Port Scan', ip: '10.0.0.12', sev: 'Medium', color: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20' },
-                  { name: 'Multiple Failed Logins', ip: '192.168.1.100', sev: 'Low', color: 'text-blue-400 bg-blue-400/10 border-blue-400/20' },
-                ].map((alert, i) => (
-                  <tr key={i} className="hover:bg-white/5 transition-colors group">
-                    <td className="py-3 px-4 text-[#E5E7EB] font-medium">{alert.name}</td>
-                    <td className="py-3 px-4 text-[#9CA3AF] font-mono">{alert.ip}</td>
-                    <td className="py-3 px-4">
-                      <span className={`px-2 py-1 rounded text-[10px] border ${alert.color}`}>{alert.sev}</span>
-                    </td>
-                    <td className="py-3 px-4 text-[#9CA3AF]">
-                      <button className="text-cyan-500 hover:text-cyan-400">Review</button>
-                    </td>
+
+          <div className={`rounded-2xl shadow-sm border overflow-hidden flex-1 flex flex-col ${
+            isDark ? 'bg-[#0A0A0A] border-[#333]' : 'bg-white border-slate-100'
+          }`}>
+            <div className={`p-4 border-b ${isDark ? 'border-[#333] bg-[#111]' : 'border-slate-100 bg-slate-50'}`}>
+              <h2 className={`font-semibold ${isDark ? 'text-gray-200 font-mono uppercase tracking-wider text-sm' : 'text-slate-800'}`}>Deep Packet Inspection Feed</h2>
+            </div>
+            <div className="flex-1 overflow-auto custom-scrollbar">
+              <table className="w-full text-left whitespace-nowrap text-sm">
+                <thead className={`sticky top-0 ${isDark ? 'bg-[#111] text-gray-500 border-b border-[#333]' : 'bg-white text-slate-500 border-b border-slate-100'}`}>
+                  <tr>
+                    <th className="p-3 font-medium">Time</th>
+                    <th className="p-3 font-medium">Source IP</th>
+                    <th className="p-3 font-medium">Dest IP</th>
+                    <th className="p-3 font-medium">Protocol</th>
+                    <th className="p-3 font-medium text-right">Risk Score</th>
+                    <th className="p-3 font-medium">Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className={`divide-y ${isDark ? 'divide-[#222]' : 'divide-slate-100'}`}>
+                  {packets.map((p: any, i: number) => (
+                    <tr key={i} className={`transition-colors ${
+                      p.status === 'DROP' ? (isDark ? 'bg-red-950/20 hover:bg-red-950/30' : 'bg-red-50/50 hover:bg-red-50') 
+                                          : (isDark ? 'hover:bg-[#111]' : 'hover:bg-slate-50')
+                    }`}>
+                      <td className={`p-3 ${isDark ? 'text-gray-500' : 'text-slate-500'}`}>{p.time}</td>
+                      <td className={`p-3 font-medium ${isDark ? 'text-gray-300' : 'text-slate-700'}`}>{p.src}</td>
+                      <td className={`p-3 ${isDark ? 'text-gray-300' : 'text-slate-700'}`}>{p.dst}</td>
+                      <td className={`p-3 font-medium ${isDark ? 'text-blue-400' : 'text-[#00bceb]'}`}>{p.proto}</td>
+                      <td className="p-3 text-right">
+                        <span className={`font-semibold ${p.risk > 75 ? (isDark ? 'text-red-400' : 'text-red-600') : (isDark ? 'text-emerald-400' : 'text-emerald-600')}`}>{p.risk.toFixed(1)}</span>
+                      </td>
+                      <td className="p-3">
+                        <span className={`px-2 py-1 rounded text-xs font-semibold ${
+                          p.status === 'DROP' ? (isDark ? 'bg-red-500/20 text-red-400 border border-red-500/20' : 'bg-red-100 text-red-700') 
+                                              : (isDark ? 'bg-[#222] text-gray-400' : 'bg-slate-100 text-slate-600')
+                        }`}>
+                          {p.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
+
         </div>
 
-        {/* IP Metadata Table (Like Image 2) */}
-        <div className="bg-[#111827] rounded-xl border border-white/5 shadow-lg overflow-hidden flex flex-col">
-          <div className="p-4 border-b border-white/5 flex justify-between items-center">
-            <h3 className="text-white text-sm font-medium">IP Metadata & Flow Ranking</h3>
-            <span className="text-cyan-500 text-xs cursor-pointer">View All Flow Logs</span>
+        {/* RIGHT COLUMN: Real-time Diagnostics & Raw Log */}
+        <div className="col-span-1 flex flex-col space-y-6 overflow-hidden">
+          
+          {/* SNMP Panel */}
+          <div className={`rounded-2xl shadow-sm border p-5 shrink-0 ${
+            isDark ? 'bg-gradient-to-br from-[#111] to-[#0A0A0A] border-[#333]' : 'bg-white border-slate-100'
+          }`}>
+            <h2 className={`text-lg font-semibold mb-5 flex items-center ${isDark ? 'text-gray-100' : 'text-slate-800'}`}><Server size={18} className={`mr-2 ${isDark ? 'text-blue-500' : 'text-slate-400'}`}/> System Diagnostics</h2>
+            <div className="space-y-5">
+              <div>
+                <div className="flex justify-between text-sm mb-2"><span className={isDark ? 'text-gray-400' : 'text-slate-500'}>CPU Usage</span><span className={`font-medium ${isDark ? 'text-gray-200' : 'text-slate-700'}`}>{telemetry.cpuUsage.toFixed(1)}%</span></div>
+                <div className={`h-2 w-full rounded-full overflow-hidden ${isDark ? 'bg-[#222]' : 'bg-slate-100'}`}><div className="h-full bg-indigo-500 transition-all duration-300" style={{ width: `${telemetry.cpuUsage}%` }}></div></div>
+              </div>
+              <div>
+                <div className="flex justify-between text-sm mb-2"><span className={isDark ? 'text-gray-400' : 'text-slate-500'}>Memory Allocation</span><span className={`font-medium ${isDark ? 'text-gray-200' : 'text-slate-700'}`}>{telemetry.ramUsage.toFixed(1)}%</span></div>
+                <div className={`h-2 w-full rounded-full overflow-hidden ${isDark ? 'bg-[#222]' : 'bg-slate-100'}`}><div className="h-full bg-blue-500 transition-all duration-300" style={{ width: `${telemetry.ramUsage}%` }}></div></div>
+              </div>
+              <div>
+                <div className="flex justify-between text-sm mb-2"><span className={isDark ? 'text-gray-400' : 'text-slate-500'}>Disk Latency</span><span className={`font-medium ${isDark ? 'text-gray-200' : 'text-slate-700'}`}>{telemetry.diskLatency.toFixed(1)}ms</span></div>
+                <div className={`h-2 w-full rounded-full overflow-hidden ${isDark ? 'bg-[#222]' : 'bg-slate-100'}`}><div className="h-full bg-orange-500 transition-all duration-300" style={{ width: `${Math.min(100, telemetry.diskLatency * 5)}%` }}></div></div>
+              </div>
+            </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-[#0B0F19] text-[#6B7280]">
-                <tr>
-                  <th className="py-3 px-4 font-medium uppercase tracking-wider">Source IP</th>
-                  <th className="py-3 px-4 font-medium uppercase tracking-wider">Target IP</th>
-                  <th className="py-3 px-4 font-medium uppercase tracking-wider">Protocol</th>
-                  <th className="py-3 px-4 font-medium uppercase tracking-wider">Tendency</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {[
-                  { src: '221.80.21.104', dst: '10.0.1.20', proto: 'TCP', tend: '+ 12%', up: true },
-                  { src: '192.168.56.20', dst: '192.168.56.1', proto: 'UDP', tend: '- 8%', up: false },
-                  { src: '10.45.1.22', dst: '8.8.8.8', proto: 'DNS', tend: '+ 2%', up: true },
-                  { src: '221.80.21.104', dst: '10.0.1.21', proto: 'TCP', tend: '+ 15%', up: true },
-                  { src: '172.16.0.4', dst: '172.16.0.255', proto: 'MDNS', tend: '- 4%', up: false },
-                ].map((flow, i) => (
-                  <tr key={i} className="hover:bg-white/5 transition-colors">
-                    <td className="py-3 px-4 text-[#3B82F6] font-mono font-medium">{flow.src}</td>
-                    <td className="py-3 px-4 text-[#9CA3AF] font-mono">{flow.dst}</td>
-                    <td className="py-3 px-4 text-[#E5E7EB]">{flow.proto}</td>
-                    <td className="py-3 px-4">
-                      <span className={`font-mono ${flow.up ? 'text-red-400' : 'text-emerald-400'}`}>
-                        {flow.up ? '▲' : '▼'} {flow.tend}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+
+          {/* Raw Log */}
+          <div className={`flex flex-col flex-1 overflow-hidden rounded-xl shadow-sm border ${isDark ? 'bg-[#020202] border-[#333]' : 'bg-white border-slate-200'}`}>
+            <div className={`p-3 border-b flex justify-between items-center ${isDark ? 'border-[#333] bg-[#111]' : 'border-slate-100 bg-slate-50'}`}>
+              <span className={`font-medium text-sm ${isDark ? 'text-gray-400' : 'text-slate-600'}`}>Raw Hex Stream</span>
+              <Terminal size={14} className={isDark ? "text-purple-500" : "text-indigo-400"} />
+            </div>
+            <div ref={terminalRef} className={`flex-1 p-4 overflow-y-auto custom-scrollbar font-mono text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              {packets.map((p: any, i: number) => (
+                <div key={i} className={`mb-1 ${p.risk > 75 ? (isDark ? 'text-red-400' : 'text-red-600') : (isDark ? 'text-slate-500' : 'text-slate-500')}`}>
+                  <span className={isDark ? "text-slate-600 mr-2" : "text-slate-400 mr-2"}>{p.id.split('_')[1]}</span>{p.hex?.slice(0, 6).join(' ')} ...
+                </div>
+              ))}
+            </div>
           </div>
+
         </div>
 
       </div>
     </div>
   );
 };
+
+export default DashboardPage;

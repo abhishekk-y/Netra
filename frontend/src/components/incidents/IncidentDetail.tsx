@@ -4,11 +4,14 @@ import { ArrowLeft, PlayCircle, Shield, Target, AlertTriangle, FastForward } fro
 import { Badge } from '../common/Badge';
 import { Panel } from '../common/Panel';
 import { ForecastVsActual } from '../forecast/ForecastVsActual';
+import { useUIStore } from '../../stores/uiStore';
 
 export const IncidentDetail: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'overview' | 'evidence' | 'timeline' | 'forecast' | 'mitre' | 'forensics' | 'response'>('overview');
+  const { theme } = useUIStore();
+  const isDark = theme === 'dark';
 
   const tabs = [
     { id: 'overview', label: 'Overview' },
@@ -21,40 +24,43 @@ export const IncidentDetail: React.FC = () => {
   ] as const;
 
   return (
-    <div className="flex flex-col h-full bg-gray-950 overflow-hidden">
+    <div className={`flex flex-col h-full overflow-hidden transition-colors duration-300 ${isDark ? 'bg-black' : 'bg-transparent'}`}>
+      
       {/* Header */}
-      <div className="h-14 border-b border-gray-800 bg-gray-900 flex items-center px-4 gap-4 shrink-0">
-        <button onClick={() => navigate('/incidents')} className="text-gray-400 hover:text-gray-200">
+      <div className={`h-16 border-b flex items-center px-6 gap-6 shrink-0 transition-all ${isDark ? 'border-[#333] bg-[#0A0A0A]' : 'border-slate-200/60 bg-white/80 backdrop-blur-md rounded-t-2xl shadow-sm mx-6 mt-6'}`}>
+        <button onClick={() => navigate('/incidents')} className={`flex items-center justify-center w-8 h-8 rounded-full transition-colors ${isDark ? 'text-gray-400 hover:text-white hover:bg-[#222]' : 'text-slate-400 hover:text-slate-700 bg-slate-50 hover:bg-slate-100'}`}>
           <ArrowLeft size={18} />
         </button>
-        <div className="flex items-center gap-3 border-r border-gray-800 pr-4">
-          <span className="font-mono font-bold text-lg text-emerald-400">{id}</span>
+        <div className={`flex items-center gap-4 pr-6 border-r ${isDark ? 'border-[#333]' : 'border-slate-200'}`}>
+          <span className={`font-mono font-bold text-xl tracking-tight ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>{id}</span>
           <Badge variant="critical">CRITICAL</Badge>
-          <span className="text-xs font-mono uppercase text-red-400 border border-red-400/30 bg-red-400/10 px-2 py-0.5 rounded">ACTIVE</span>
+          <span className={`text-[10px] font-bold tracking-widest uppercase px-3 py-1 rounded-md ${isDark ? 'text-red-400 border border-red-900/50 bg-red-950/40' : 'text-red-600 border border-red-200 bg-red-50'}`}>ACTIVE</span>
         </div>
         <div className="flex-1 truncate">
-          <h1 className="text-base font-medium text-gray-200 truncate">Ransomware precursor behavior on segment A</h1>
+          <h1 className={`text-lg font-bold truncate ${isDark ? 'text-gray-200' : 'text-slate-800'}`}>Ransomware precursor behavior on segment A</h1>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-3">
           <button 
             onClick={() => navigate(`/replay/${id}`)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs rounded transition-colors border border-gray-700"
+            className={`flex items-center gap-2 px-4 py-2 font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5 ${
+              isDark ? 'bg-[#111] hover:bg-[#222] text-gray-200 border border-[#333]' : 'bg-gradient-to-r from-indigo-600 to-[#00bceb] text-white border-transparent'
+            }`}
           >
-            <PlayCircle size={14} /> Replay Incident
+            <PlayCircle size={16} /> Replay Incident
           </button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-800 bg-gray-900/50 px-4 shrink-0">
+      <div className={`flex border-b px-6 shrink-0 transition-colors ${isDark ? 'border-[#333] bg-[#050505]' : 'border-slate-200 bg-white/50 backdrop-blur-sm mx-6'}`}>
         {tabs.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+            className={`px-5 py-4 text-sm font-bold uppercase tracking-wider border-b-2 transition-all duration-200 ${
               activeTab === tab.id 
-                ? 'border-emerald-500 text-emerald-400' 
-                : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-700'
+                ? (isDark ? 'border-emerald-500 text-emerald-400' : 'border-indigo-500 text-indigo-600') 
+                : (isDark ? 'border-transparent text-gray-500 hover:text-gray-200 hover:border-[#333]' : 'border-transparent text-slate-400 hover:text-slate-700 hover:border-slate-300')
             }`}
           >
             {tab.label}
@@ -63,37 +69,43 @@ export const IncidentDetail: React.FC = () => {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-4 custom-scrollbar">
+      <div className={`flex-1 overflow-auto p-6 custom-scrollbar ${isDark ? '' : 'mx-6 mb-6 bg-white/40 backdrop-blur-md rounded-b-2xl border-x border-b border-slate-200 shadow-sm'}`}>
         {activeTab === 'overview' && (
-          <div className="grid grid-cols-12 gap-4 h-full">
-            <div className="col-span-8 flex flex-col gap-4">
+          <div className="grid grid-cols-12 gap-6 h-full">
+            <div className="col-span-8 flex flex-col gap-6">
               <Panel title="Executive Summary" className="shrink-0">
-                <p className="text-sm text-gray-300 leading-relaxed">
-                  Multiple indicators suggest early-stage ransomware activity. Initial access likely achieved via SMB brute force on 10.0.0.5, followed by successful lateral movement to 192.168.1.45. The AI model forecasts a 92% probability of exfiltration occurring within the next 5 minutes.
+                <p className={`text-sm leading-relaxed ${isDark ? 'text-gray-300' : 'text-slate-600 font-medium'}`}>
+                  Multiple indicators suggest early-stage ransomware activity. Initial access likely achieved via SMB brute force on <span className="font-mono font-bold text-indigo-500">10.0.0.5</span>, followed by successful lateral movement to <span className="font-mono font-bold text-emerald-500">192.168.1.45</span>. The AI model forecasts a <span className="font-bold text-rose-500">92% probability</span> of exfiltration occurring within the next 5 minutes.
                 </p>
               </Panel>
               
               <Panel title="Blast Radius & Affected Hosts" className="flex-1 min-h-[300px]">
-                <div className="flex items-center justify-center h-full text-gray-500 font-mono text-sm border border-dashed border-gray-800 m-4 rounded">
-                  [Mini Topology Visualization goes here]
+                <div className={`flex items-center justify-center h-full font-mono text-sm border-2 border-dashed m-6 rounded-2xl ${isDark ? 'text-gray-500 border-[#333]' : 'text-slate-400 border-slate-200 bg-slate-50/50'}`}>
+                  [Mini Topology Visualization rendering...]
                 </div>
               </Panel>
             </div>
-            <div className="col-span-4 flex flex-col gap-4">
+            
+            <div className="col-span-4 flex flex-col gap-6">
               <Panel title="Current Status" className="shrink-0">
-                <div className="space-y-4">
-                  <div>
-                    <div className="text-xs text-gray-500 font-mono mb-1">CURRENT STAGE</div>
-                    <div className="flex items-center gap-2">
-                      <Target size={16} className="text-red-500" />
-                      <span className="text-gray-200 font-bold">Lateral Movement</span>
+                <div className="space-y-6">
+                  <div className={`p-4 rounded-xl border ${isDark ? 'bg-[#111] border-[#333]' : 'bg-white shadow-sm border-slate-100'}`}>
+                    <div className={`text-xs font-bold font-mono uppercase tracking-widest mb-2 ${isDark ? 'text-gray-500' : 'text-slate-400'}`}>CURRENT STAGE</div>
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isDark ? 'bg-red-950/40' : 'bg-red-50'}`}>
+                        <Target size={18} className={isDark ? "text-red-400" : "text-red-500"} />
+                      </div>
+                      <span className={`font-bold text-lg ${isDark ? 'text-gray-200' : 'text-slate-700'}`}>Lateral Movement</span>
                     </div>
                   </div>
-                  <div>
-                    <div className="text-xs text-gray-500 font-mono mb-1">AI FORECAST (T+5m)</div>
-                    <div className="flex items-center gap-2">
-                      <FastForward size={16} className="text-orange-500" />
-                      <span className="text-gray-200 font-bold">Exfiltration (92%)</span>
+                  
+                  <div className={`p-4 rounded-xl border ${isDark ? 'bg-[#111] border-[#333]' : 'bg-white shadow-sm border-slate-100'}`}>
+                    <div className={`text-xs font-bold font-mono uppercase tracking-widest mb-2 ${isDark ? 'text-gray-500' : 'text-slate-400'}`}>AI FORECAST (T+5m)</div>
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isDark ? 'bg-orange-950/40' : 'bg-orange-50'}`}>
+                        <FastForward size={18} className={isDark ? "text-orange-400" : "text-orange-500"} />
+                      </div>
+                      <span className={`font-bold text-lg ${isDark ? 'text-gray-200' : 'text-slate-700'}`}>Exfiltration (92%)</span>
                     </div>
                   </div>
                 </div>
@@ -103,7 +115,7 @@ export const IncidentDetail: React.FC = () => {
         )}
         
         {activeTab === 'forecast' && (
-          <div className="h-[400px]">
+          <div className="h-[500px]">
              <Panel title="Forecast vs Actual Timeline" className="h-full">
                <ForecastVsActual />
              </Panel>
@@ -112,8 +124,8 @@ export const IncidentDetail: React.FC = () => {
 
         {/* Other tabs would have their content... */}
         {activeTab !== 'overview' && activeTab !== 'forecast' && (
-           <div className="flex items-center justify-center h-full text-gray-500 font-mono">
-             CONTENT FOR {activeTab.toUpperCase()}
+           <div className={`flex items-center justify-center h-full font-mono text-sm tracking-widest uppercase ${isDark ? 'text-[#333]' : 'text-slate-300'}`}>
+             CONTENT FOR {activeTab} RENDERING...
            </div>
         )}
       </div>

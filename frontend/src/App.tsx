@@ -15,6 +15,7 @@ import MitrePage from './components/mitre/MitrePage';
 import HealthPage from './components/health/HealthPage';
 import ReplayPage from './components/forensics/ReplayPage';
 import SettingsPage from './components/settings/SettingsPage';
+import DeceptionPage from './components/deception/DeceptionPage';
 
 function App() {
   return (
@@ -33,6 +34,7 @@ function App() {
           <Route path="assets" element={<AssetsPage />} />
           <Route path="mitre" element={<MitrePage />} />
           <Route path="health" element={<HealthPage />} />
+          <Route path="deception" element={<DeceptionPage />} />
           <Route path="forensics/replay" element={<ReplayPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

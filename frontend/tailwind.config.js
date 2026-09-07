@@ -7,13 +7,14 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'sans-serif'],
-        mono: ['JetBrains Mono', 'monospace'],
+        sans: ['Outfit', 'sans-serif'],
+        mono: ['"Fira Code"', 'monospace'],
       },
-      colors: {
-        background: '#0B0F19',
-        panel: '#111827',
-        border: '#1F2937',
+      keyframes: {
+        marquee: {
+          '0%': { transform: 'translateX(0%)' },
+          '100%': { transform: 'translateX(-100%)' },
+        }
       }
     },
   },

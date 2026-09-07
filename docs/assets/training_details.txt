@@ -1,0 +1,17 @@
+====================================================
+      NETRA-X DEEP LEARNING ENSEMBLE REPORT
+====================================================
+Data Source:      KDD Cup 99 (Intrusion Detection)
+Dataset Size:     100655 rows, 42 features
+Training Time:    22.76 seconds
+Overall Accuracy: 99.9106%
+Model Stack:      XGBoost + Random Forest + MLP Neural Net (Soft Voting)
+====================================================
+              precision    recall  f1-score   support
+
+      Normal       1.00      1.00      1.00     19481
+      Attack       1.00      0.97      0.99       650
+
+    accuracy                           1.00     20131
+   macro avg       1.00      0.99      0.99     20131
+weighted avg       1.00      1.00      1.00     20131
