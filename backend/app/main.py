@@ -14,7 +14,10 @@ def create_app(db_path=None, seed_demo=None):
     @asynccontextmanager
     async def lifespan(application):
         application.state.store = Store(db_path, seed_demo)
+        from app.services.telemetry.simulator import simulator
+        await simulator.start()
         yield
+        await simulator.stop()
         application.state.store.close()
     
     application = FastAPI(

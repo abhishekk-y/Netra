@@ -33,7 +33,7 @@ def main() -> None:
         raise SystemExit("Node.js and npm are required. Install Node.js 22 or newer.")
     if args.install:
         subprocess.run([sys.executable, "-m", "pip", "install", "-r", str(ROOT / "backend/requirements.txt")], check=True)
-        subprocess.run([npm, "ci"], cwd=ROOT / "frontend", check=True)
+        subprocess.run([npm, "install"], cwd=ROOT / "frontend", check=True)
     if not (ROOT / "frontend/node_modules").exists():
         raise SystemExit("Dependencies are missing. Run this command again with --install.")
     available(8000)

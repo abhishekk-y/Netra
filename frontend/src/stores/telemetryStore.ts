@@ -45,9 +45,12 @@ class WebSocketService {
     
     this.ws.onmessage = (event) => {
       try {
-        const msg: WSMessage = JSON.parse(event.data);
-        if (msg.type === 'telemetry') {
-          useTelemetryStore.getState().updateTelemetry(msg.payload);
+        const msg = JSON.parse(event.data);
+        // Handle both raw payloads and standard channel payloads
+        const type = msg.type || msg.channel;
+        const payload = msg.payload || msg.data;
+        if (type === 'telemetry' || type === 'telemetry_update') {
+          useTelemetryStore.getState().updateTelemetry(payload);
         }
       } catch (err) {
         console.error('WS Parse Error', err);
