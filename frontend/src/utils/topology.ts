@@ -18,7 +18,7 @@ export const getRiskColor = (risk: number) => {
   return '#10b981'; // emerald
 };
 
-export const defaultStylesheet: cytoscape.Stylesheet[] = [
+export const defaultStylesheet: cytoscape.StylesheetJson = [
   {
     selector: 'node',
     style: {
@@ -36,7 +36,7 @@ export const defaultStylesheet: cytoscape.Stylesheet[] = [
       'height': 30,
       'shape': (ele) => {
         const type = ele.data('type');
-        if (type === 'firewall') return 'square';
+        if (type === 'firewall') return 'rectangle';
         if (type === 'server') return 'barrel';
         if (type === 'router') return 'diamond';
         return 'ellipse';
@@ -51,7 +51,7 @@ export const defaultStylesheet: cytoscape.Stylesheet[] = [
       'color': '#fff',
       'text-background-color': '#000',
       'text-background-opacity': 0.7,
-      'text-background-padding': 2,
+      'text-background-padding': '2px',
       'text-background-shape': 'roundrectangle'
     }
   },
@@ -60,15 +60,15 @@ export const defaultStylesheet: cytoscape.Stylesheet[] = [
     style: {
       'border-width': 4,
       'border-color': '#10b981',
-      'shadow-blur': 10,
-      'shadow-color': '#10b981',
-      'shadow-opacity': 0.8
+
+
+
     }
   },
   {
     selector: 'edge',
     style: {
-      'width': (ele) => Math.max(1, Math.min(5, ele.data('weight') / 100)),
+      'width': (ele: cytoscape.EdgeSingular) => Math.max(1, Math.min(5, ele.data('weight') / 100)),
       'line-color': '#3f3f46',
       'target-arrow-color': '#3f3f46',
       'target-arrow-shape': 'triangle',
@@ -112,3 +112,5 @@ export const getLayoutConfig = (mode: string) => {
       return { name: 'cose', idealEdgeLength: 100, nodeOverlap: 20, refresh: 20, fit: true, padding: 30, randomize: false, componentSpacing: 100, nodeRepulsion: 400000, edgeElasticity: 100, nestingFactor: 5 };
   }
 };
+
+

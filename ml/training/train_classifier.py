@@ -26,7 +26,7 @@ def main():
     report = analyzer.analyze(features_df, label_col='label')
     print("Dataset Quality Report:", report)
 
-    # Need a dummy time column for temporal split if it doesn't exist, normally CIC-IDS has timestamp
+    # A temporal evaluation requires observed timestamps, unless explicitly waived.
     if 'Timestamp' in df.columns:
         features_df['timestamp'] = pd.to_datetime(df['Timestamp'], errors='raise')
     else:

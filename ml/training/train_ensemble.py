@@ -1,13 +1,15 @@
 """
 Netra-X ML Ensemble Training Script
-Trains a production ensemble on synthetic NSL-KDD/CICIDS2017-style network flow data.
-Saves model to backend/app/models/nx_tfr_ensemble.pkl
+Trains a flow classifier on supplied measured features or explicitly synthetic examples.
+This is detection, not future-event forecasting. Synthetic metrics establish only
+agreement with this generator and cannot establish real-world attack accuracy.
 Usage:
-    python -m ml.training.train_ensemble
-    # or from project root:
-    .venv/Scripts/python.exe -m ml.training.train_ensemble
+    python -m ml.training.train_ensemble --data measured_features.csv
+    python -m ml.training.train_ensemble --synthetic --samples 5000
 """
 import os
+import argparse
+import hashlib
 import sys
 import time
 import numpy as np
@@ -30,7 +32,7 @@ from sklearn.metrics import (
 import xgboost as xgb
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT_PATH = ROOT / "backend" / "app" / "models" / "nx_tfr_ensemble.pkl"
+OUT_PATH = ROOT / "ml" / "artifacts" / "flow_ensemble.pkl"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # FEATURE SCHEMA
@@ -56,9 +58,11 @@ ATTACK_CLASSES = [
 
 # ─────────────────────────────────────────────────────────────────────────────
 # SYNTHETIC DATA GENERATOR
-# Produces statistically realistic network flow feature distributions
+# Illustrative distributions chosen by hand; not a benchmark dataset.
 # ─────────────────────────────────────────────────────────────────────────────
 def generate_synthetic_dataset(n_samples: int = 120_000, seed: int = 42) -> pd.DataFrame:
+    if n_samples < 100:
+        raise ValueError("Synthetic demonstrations need at least 100 samples")
     rng = np.random.default_rng(seed)
     records = []
 
@@ -183,12 +187,12 @@ def extract_features(flow: dict) -> np.ndarray:
     Extract the 23-dimensional feature vector from a raw flow dict.
     Compatible with both ingested flows and the training schema.
     """
-    dur = max(float(flow.get('duration', 0.001) or 0.001), 0.001)
+    dur = max(float(flow.get('duration', 0) or 0), 0)
     src_port = int(flow.get('srcPort', 0) or 0)
     dst_port = int(flow.get('dstPort', 0) or 0)
     proto = str(flow.get('protocol', '')).upper()
     bytes_n = float(flow.get('bytes', 0) or 0)
-    packets_n = max(float(flow.get('packets', 1) or 1), 1)
+    packets_n = max(float(flow.get('packets', 0) or 0), 0)
     dst_ip = str(flow.get('dstIp', ''))
     src_ip = str(flow.get('srcIp', ''))
 
@@ -211,9 +215,9 @@ def extract_features(flow: dict) -> np.ndarray:
         1 if proto == 'ICMP' else 0,               # 5 protocol_icmp
         bytes_n,                                    # 6 bytes
         packets_n,                                  # 7 packets
-        bytes_n / packets_n,                        # 8 bytes_per_packet
-        packets_n / dur,                            # 9 packets_per_sec
-        bytes_n / dur,                              # 10 bytes_per_sec
+        bytes_n / packets_n if packets_n else 0,     # 8 bytes_per_packet
+        packets_n / dur if dur else 0,               # 9 packets_per_sec
+        bytes_n / dur if dur else 0,                 # 10 bytes_per_sec
         1 if dst_priv else 0,                      # 11 dst_is_private
         0 if dst_priv else 1,                      # 12 dst_is_external
         0 if src_priv else 1,                      # 13 src_is_external
@@ -232,29 +236,57 @@ def extract_features(flow: dict) -> np.ndarray:
 # ─────────────────────────────────────────────────────────────────────────────
 # TRAIN
 # ─────────────────────────────────────────────────────────────────────────────
-def train():
+def train(data=None, *, synthetic=False, samples=5000, output=None):
+    if (data is None) == (not synthetic):
+        raise ValueError("Choose exactly one supplied data CSV or explicit synthetic mode")
+    output_path = Path(output) if output else OUT_PATH.with_name("synthetic_flow_ensemble.pkl") if synthetic else OUT_PATH
+    if output_path.exists():
+        raise FileExistsError(f"Refusing to overwrite existing model: {output_path}")
     print("=" * 60)
     print("  NETRA-X ML ENSEMBLE TRAINING")
     print("=" * 60)
 
     # 1. Generate data
-    print("\n[1/5] Generating synthetic training data...")
+    print("\n[1/5] Preparing explicitly identified training data...")
     t0 = time.time()
-    df = generate_synthetic_dataset(n_samples=100_000)
+    if synthetic:
+        df = generate_synthetic_dataset(n_samples=samples)
+        provenance = {"kind": "synthetic", "generator": "hand-authored-flow-distributions", "seed": 42}
+        print("SYNTHETIC DEMO: results are not measured network detection or forecasting performance.")
+    else:
+        df = pd.read_csv(data)
+        required = set(FEATURE_NAMES) | {"label", "timestamp"}
+        if required - set(df):
+            raise ValueError(f"Measured CSV is missing columns: {sorted(required - set(df))}")
+        df["timestamp"] = pd.to_datetime(df["timestamp"], errors="raise", utc=True)
+        df = df.sort_values("timestamp", kind="stable").reset_index(drop=True)
+        provenance = {"kind": "user-supplied", "filename": Path(data).name,
+                      "sha256": hashlib.sha256(Path(data).read_bytes()).hexdigest()}
     print(f"  Done in {time.time()-t0:.1f}s")
 
     # 2. Prepare features
     print("\n[2/5] Preparing features...")
     X = df[FEATURE_NAMES].values.astype(np.float32)
+    if not np.isfinite(X).all() or df["label"].isna().any():
+        raise ValueError("Training features and labels must be complete and finite")
     le = LabelEncoder()
     y = le.fit_transform(df['label'].values)
     class_names = le.classes_.tolist()
     print(f"  Feature matrix: {X.shape} | Classes: {class_names}")
 
     # 3. Split
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
+    if synthetic:
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42, stratify=y)
+        split_method = "stratified-random-synthetic-holdout"
+    else:
+        from ml.datasets.quality import DatasetQualityAnalyzer
+        train_frame, test_frame = DatasetQualityAnalyzer().temporal_split(df, "timestamp", .2)
+        split = len(train_frame)
+        X_train, X_test, y_train, y_test = X[:split], X[split:], y[:split], y[split:]
+        split_method = "strict-timestamp-holdout"
+        if len(np.unique(y_train)) != len(class_names):
+            raise ValueError("Training interval does not contain every class; collect more training history")
     print(f"  Train: {len(X_train):,} | Test: {len(X_test):,}")
 
     # 4. Build ensemble
@@ -331,11 +363,15 @@ def train():
     print(classification_report(y_test, y_pred, target_names=class_names))
 
     # 6. Save
-    print(f"\n[5/5] Saving model to {OUT_PATH}...")
-    OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    print(f"\n[5/5] Saving model to {output_path}...")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
     artifact = {
         'version': '2.0.0',
+        'task': 'flow-classification',
+        'forecasting_validated': False,
+        'data_provenance': provenance,
+        'evaluation_scope': 'synthetic-generator-holdout' if synthetic else 'user-supplied-temporal-holdout',
         'trained_at': pd.Timestamp.now().isoformat(),
         'feature_names': FEATURE_NAMES,
         'class_names': class_names,
@@ -344,6 +380,8 @@ def train():
         'ensemble': voting_clf,
         'anomaly_detector': iso,
         'metrics': {
+            'split_method': split_method,
+            'synthetic': synthetic,
             'accuracy': float(acc),
             'f1_weighted': float(f1),
             'n_train': len(X_train),
@@ -352,18 +390,27 @@ def train():
         }
     }
 
-    joblib.dump(artifact, OUT_PATH, compress=3)
-    size_kb = OUT_PATH.stat().st_size / 1024
+    with output_path.open("xb") as stream:
+        joblib.dump(artifact, stream, compress=3)
+    size_kb = output_path.stat().st_size / 1024
     print(f"  Saved! Size: {size_kb:.1f} KB")
 
     print("\n" + "=" * 60)
     print(f"  TRAINING COMPLETE")
     print(f"  Accuracy: {acc*100:.2f}% | F1: {f1*100:.2f}%")
-    print(f"  Model: {OUT_PATH}")
+    print(f"  Model: {output_path}")
+    print("  Evaluation concerns classification of these held-out flows, not future attacks.")
     print("=" * 60)
 
     return artifact
 
 
 if __name__ == '__main__':
-    train()
+    parser = argparse.ArgumentParser(description="Train a flow detector with explicit dataset provenance")
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--data", help="CSV with the 23 documented features, label and timestamp")
+    source.add_argument("--synthetic", action="store_true", help="Explicitly opt into synthetic demonstration training")
+    parser.add_argument("--samples", type=int, default=5000)
+    parser.add_argument("--output", help="New artifact path; existing artifacts are never overwritten")
+    args = parser.parse_args()
+    train(args.data, synthetic=args.synthetic, samples=args.samples, output=args.output)

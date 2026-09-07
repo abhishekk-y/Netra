@@ -1,25 +1,33 @@
 import React, { useEffect } from 'react';
-import { Outlet, NavLink, useLocation } from 'react-router-dom';
+import { Outlet, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { api, apiService } from '../services/api';
 import {
   Activity, ShieldAlert, Network, Database,
-  Terminal, Settings, Bell, Search, Cpu,
+  Terminal, Settings, Bell, Search,
   Eye, Bug, Play, Box, FileText, HeartPulse, Moon, Sun,
-  ChevronRight, Shield, Layers, Crosshair, Wifi, Globe
+  Shield, Layers, Crosshair
 } from 'lucide-react';
-import { wsService } from '../stores/telemetryStore';
 import { useUIStore } from '../stores/uiStore';
-import { useTelemetryStore } from '../stores/telemetryStore';
 
 export const MainLayout: React.FC = () => {
   const location = useLocation();
   const { theme, toggleTheme } = useUIStore();
   const isDark = theme === 'dark';
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
-  const telemetry = useTelemetryStore();
-
-  useEffect(() => {
-    wsService.connect();
-  }, []);
+  const navigate = useNavigate();
+  const client = useQueryClient();
+  const [search, setSearch] = React.useState('');
+  const [demoBusy, setDemoBusy] = React.useState(false);
+  const [error, setError] = React.useState('');
+  const health = useQuery({queryKey:['health'], queryFn:apiService.getHealth, refetchInterval:15000});
+  const settings = useQuery({queryKey:['settings'], queryFn:async () => (await api.get<{demoMode:boolean}>('/settings')).data});
+  async function runDemo() {
+    setDemoBusy(true); setError('');
+    try {await api.post('/demo/run'); await client.invalidateQueries();}
+    catch {setError('Demo could not be loaded. Check the API connection and retry.');}
+    finally {setDemoBusy(false);}
+  }
 
   useEffect(() => {
     const html = document.documentElement;
@@ -97,6 +105,7 @@ export const MainLayout: React.FC = () => {
       <aside
         onMouseEnter={() => setIsSidebarOpen(true)}
         onMouseLeave={() => setIsSidebarOpen(false)}
+        onFocusCapture={() => setIsSidebarOpen(true)}
         style={{ width: isSidebarOpen ? '260px' : '72px', transition: 'width 0.25s cubic-bezier(0.4,0,0.2,1)' }}
         className={`flex flex-col z-50 shrink-0 overflow-hidden ${
           isDark
@@ -231,7 +240,7 @@ export const MainLayout: React.FC = () => {
               }}
               className={isDark ? 'text-slate-500' : 'text-slate-400'}
             >
-              Sensors Active
+              {health.isError ? 'API unavailable' : 'Stored evidence analysis'}
             </span>
           </div>
         </div>
@@ -266,27 +275,31 @@ export const MainLayout: React.FC = () => {
                 : 'bg-emerald-50 border-emerald-200 text-emerald-700'
             }`}>
               <div className="status-dot-online" style={{ width: 6, height: 6 }} />
-              <span>Live Monitoring</span>
+              <span>{health.isPending ? 'Connecting' : health.isError ? 'API unavailable' : health.data?.components.capture === 'up' ? 'Sensor attached' : 'API connected / No live sensor'}</span>
             </div>
 
             {/* Search */}
-            <div className="relative">
+            <form className="relative hidden lg:block" onSubmit={e=>{e.preventDefault();navigate(`/flows?q=${encodeURIComponent(search)}`);}}>
               <Search size={14} className={`absolute left-3 top-1/2 -translate-y-1/2 ${
                 isDark ? 'text-slate-600' : 'text-slate-400'
               }`} />
               <input
                 type="text"
-                placeholder="Search IPs, rules, incidents..."
+                aria-label="Search flow evidence"
+                value={search}
+                onChange={e=>setSearch(e.target.value)}
+                placeholder="Search traffic and press Enter..."
                 className={`pl-9 pr-4 py-1.5 w-64 rounded-lg text-sm focus:outline-none focus:ring-2 transition-all ${
                   isDark
                     ? 'bg-white/[0.04] border border-white/[0.08] text-slate-300 placeholder-slate-600 focus:ring-cyan-500/30 focus:border-cyan-500/40'
                     : 'bg-slate-50 border border-slate-200 text-slate-700 placeholder-slate-400 focus:ring-indigo-500/30 focus:border-indigo-400'
                 }`}
               />
-            </div>
+            </form>
 
             {/* Theme toggle */}
             <button
+              aria-label="Toggle light or dark theme"
               onClick={toggleTheme}
               className={`p-2 rounded-lg transition-colors ${
                 isDark
@@ -298,13 +311,12 @@ export const MainLayout: React.FC = () => {
             </button>
 
             {/* Notifications */}
-            <button className={`relative p-2 rounded-lg transition-colors ${
+            <button aria-label="Open detection alerts" onClick={()=>navigate('/alerts')} className={`relative p-2 rounded-lg transition-colors ${
               isDark
                 ? 'bg-white/[0.04] border border-white/[0.08] text-slate-400 hover:bg-white/[0.08]'
                 : 'bg-slate-100 border border-slate-200 text-slate-600 hover:bg-slate-200'
             }`}>
               <Bell size={16} />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-transparent" />
             </button>
 
             {/* Avatar */}
@@ -318,6 +330,12 @@ export const MainLayout: React.FC = () => {
 
           </div>
         </header>
+
+        <div className={`px-6 py-2 flex flex-wrap items-center justify-between gap-2 text-xs border-b ${settings.data?.demoMode ? 'bg-amber-500/10 text-amber-600 border-amber-500/20' : 'border-[var(--color-border)] text-[var(--color-text-secondary)]'}`}>
+          <span>{settings.data?.demoMode ? 'DEMO DATA / Synthetic scenario evidence. Not observations of your network.' : 'EVIDENCE WORKSPACE / Import traffic records or load the optional synthetic demonstration.'}</span>
+          <button className="button" disabled={demoBusy} onClick={runDemo}><Play size={13}/>{demoBusy ? 'Loading scenario...' : 'Load demo scenario'}</button>
+        </div>
+        {error && <div role="alert" className="px-6 py-2 text-red-500">{error}</div>}
 
         {/* PAGE CONTENT */}
         <div className={`flex-1 overflow-auto custom-scrollbar ${

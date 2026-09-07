@@ -1,158 +1,348 @@
 import React from 'react';
-import { Panel } from '../common/Panel';
-import { Badge } from '../common/Badge';
-import { Activity, ShieldAlert, FastForward, Server, Network } from 'lucide-react';
+import ReactECharts from 'echarts-for-react';
+import { useQuery } from '@tanstack/react-query';
 import { useUIStore } from '../../stores/uiStore';
+import {
+  Eye, Target, Brain, ChevronRight, AlertTriangle,
+  TrendingUp, Activity, Clock, Cpu, Shield
+} from 'lucide-react';
+
+const API = 'http://localhost:8000/api/v1';
+
+const KILL_CHAIN = [
+  'Reconnaissance',
+  'Initial Access',
+  'Execution',
+  'Persistence',
+  'Privilege Escalation',
+  'Defense Evasion',
+  'Credential Access',
+  'Discovery',
+  'Lateral Movement',
+  'Collection',
+  'Command & Control',
+  'Exfiltration',
+  'Impact',
+];
+
+const demoForecast = {
+  id: 'f1',
+  currentStage: 'Reconnaissance',
+  stageConfidence: 0.87,
+  sourceIp: '10.42.0.10',
+  nextStages: [
+    { stage: 'Initial Access', probability: 0.55 },
+    { stage: 'Lateral Movement', probability: 0.30 },
+    { stage: 'Impact', probability: 0.15 },
+  ],
+  targetPredictions: [
+    { hostId: 'h1', ip: '10.42.0.20', probability: 0.68, hostname: 'web-server' },
+    { hostId: 'h2', ip: '10.42.0.21', probability: 0.22, hostname: 'file-server' },
+    { hostId: 'h3', ip: '10.42.0.30', probability: 0.10, hostname: 'db-server' },
+  ],
+  method: 'heuristic-transition-rules',
+  explanation: 'Port scan activity detected from 10.42.0.10. Rapid fan-out to 12 destination ports within 5 minutes is consistent with automated reconnaissance tooling.',
+  timestamp: new Date().toISOString(),
+};
+
+function stageColor(stage: string, isDark: boolean): string {
+  const map: Record<string, string> = {
+    'Reconnaissance': isDark ? 'text-yellow-400' : 'text-yellow-600',
+    'Initial Access': isDark ? 'text-orange-400' : 'text-orange-600',
+    'Lateral Movement': isDark ? 'text-red-400' : 'text-red-600',
+    'Exfiltration': isDark ? 'text-red-500' : 'text-red-700',
+    'Impact': isDark ? 'text-red-600' : 'text-red-800',
+    'Command & Control': isDark ? 'text-purple-400' : 'text-purple-600',
+    'Credential Access': isDark ? 'text-orange-400' : 'text-orange-600',
+  };
+  return map[stage] ?? (isDark ? 'text-slate-400' : 'text-slate-600');
+}
+
+function stageBg(stage: string, isDark: boolean): string {
+  const map: Record<string, string> = {
+    'Reconnaissance': isDark ? 'bg-yellow-500/10 border-yellow-500/20' : 'bg-yellow-50 border-yellow-200',
+    'Initial Access': isDark ? 'bg-orange-500/10 border-orange-500/20' : 'bg-orange-50 border-orange-200',
+    'Lateral Movement': isDark ? 'bg-red-500/10 border-red-500/20' : 'bg-red-50 border-red-200',
+    'Exfiltration': isDark ? 'bg-red-600/10 border-red-600/20' : 'bg-red-100 border-red-300',
+    'Impact': isDark ? 'bg-red-700/10 border-red-700/20' : 'bg-red-100 border-red-300',
+  };
+  return map[stage] ?? (isDark ? 'bg-slate-500/10 border-slate-500/20' : 'bg-slate-50 border-slate-200');
+}
 
 export const ForecastPage: React.FC = () => {
   const { theme } = useUIStore();
   const isDark = theme === 'dark';
 
-  // Hardcoded for demo purposes as requested for realistic states
-  const forecast = {
-    currentStage: 'Lateral Movement',
-    stageConfidence: 0.92,
-    timeInStage: '14m 32s',
-    nextStages: [
-      { stage: 'Exfiltration', probability: 0.85, horizon: 'T+5m' },
-      { stage: 'Impact', probability: 0.12, horizon: 'T+30m' },
-      { stage: 'Command and Control', probability: 0.03, horizon: 'T+1m' }
-    ],
-    targets: [
-      { id: 'srv-db', ip: '10.0.0.5', name: 'DB-PROD-01', probability: 0.92 },
-      { id: 'srv-fs', ip: '10.0.0.8', name: 'FILE-SERVER', probability: 0.45 },
-      { id: 'ws-admin', ip: '192.168.1.100', name: 'ADMIN-WS', probability: 0.15 }
-    ],
-    evidence: [
-      'SMB brute force observed from 192.168.1.45 to 10.0.0.5',
-      'Suspicious RDP session established',
-      'BloodHound-like AD enumeration detected'
-    ]
+  const { data: forecast } = useQuery({
+    queryKey: ['forecast'],
+    queryFn: async () => {
+      const res = await fetch(`${API}/forecast`);
+      if (!res.ok) throw new Error('fail');
+      return res.json();
+    },
+    initialData: demoForecast,
+    refetchInterval: 5000,
+  });
+
+  const fc = forecast ?? demoForecast;
+  const currentIdx = KILL_CHAIN.indexOf(fc.currentStage);
+
+  const gaugeOption = {
+    backgroundColor: 'transparent',
+    series: [{
+      type: 'gauge',
+      startAngle: 180,
+      endAngle: 0,
+      radius: '100%',
+      center: ['50%', '80%'],
+      min: 0,
+      max: 100,
+      splitNumber: 4,
+      axisLine: {
+        lineStyle: {
+          width: 12,
+          color: [
+            [0.3, isDark ? '#334155' : '#E2E8F0'],
+            [0.6, isDark ? '#F59E0B' : '#D97706'],
+            [0.8, isDark ? '#F97316' : '#EA580C'],
+            [1, isDark ? '#EF4444' : '#DC2626'],
+          ]
+        }
+      },
+      pointer: {
+        length: '65%',
+        width: 4,
+        itemStyle: { color: isDark ? '#E2E8F0' : '#1E293B' }
+      },
+      splitLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { show: false },
+      detail: {
+        valueAnimation: true,
+        formatter: (v: number) => `${v.toFixed(0)}%`,
+        color: isDark ? '#E2E8F0' : '#1E293B',
+        fontSize: 20,
+        fontWeight: 'bold',
+        offsetCenter: [0, '-15%'],
+      },
+      data: [{ value: fc.stageConfidence * 100 }],
+    }]
+  };
+
+  const barOption = {
+    backgroundColor: 'transparent',
+    tooltip: { trigger: 'axis', backgroundColor: isDark ? '#0F172A' : '#fff', borderColor: isDark ? 'rgba(255,255,255,0.1)' : '#e2e8f0', textStyle: { color: isDark ? '#e2e8f0' : '#1e293b', fontSize: 11 }, formatter: (p: any[]) => `${p[0].name}: ${(p[0].value * 100).toFixed(1)}%` },
+    grid: { top: 8, right: 16, bottom: 0, left: 0, containLabel: true },
+    xAxis: { type: 'value', max: 1, splitLine: { show: false }, axisLabel: { show: false }, axisLine: { show: false } },
+    yAxis: { type: 'category', data: fc.nextStages.map((s: any) => s.stage).reverse(), axisLabel: { color: isDark ? '#94A3B8' : '#475569', fontSize: 11 }, axisLine: { show: false }, axisTick: { show: false } },
+    series: [{
+      type: 'bar',
+      data: fc.nextStages.map((s: any) => s.probability).reverse(),
+      label: { show: true, position: 'right', formatter: (p: any) => `${(p.value * 100).toFixed(0)}%`, color: isDark ? '#94A3B8' : '#475569', fontSize: 11 },
+      itemStyle: {
+        color: (params: any) => {
+          const colors = isDark
+            ? ['#EF4444', '#F97316', '#F59E0B']
+            : ['#DC2626', '#EA580C', '#D97706'];
+          return colors[params.dataIndex % colors.length];
+        },
+        borderRadius: [0, 4, 4, 0],
+      },
+      barMaxWidth: 24,
+      background: { show: true, itemStyle: { color: isDark ? 'rgba(255,255,255,0.03)' : '#F1F5F9', borderRadius: [0, 4, 4, 0] } },
+    }]
   };
 
   return (
-    <div className={`flex flex-col h-full p-4 gap-4 overflow-auto custom-scrollbar ${isDark ? 'bg-[#000]' : 'bg-transparent'}`}>
-      {/* Header Banner */}
-      <div className={`p-4 rounded-xl flex items-center justify-between shrink-0 shadow-sm border ${
-        isDark ? 'bg-orange-500/10 border-orange-500/20' : 'bg-orange-50 border-orange-200'
-      }`}>
-        <div className="flex items-center gap-4">
-          <FastForward size={28} className={isDark ? 'text-orange-500' : 'text-orange-600'} />
-          <div>
-            <h1 className={`text-lg font-bold ${isDark ? 'text-gray-100' : 'text-slate-800'}`}>Active Attack Forecast</h1>
-            <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-slate-600'}`}>Netra AI has identified an unfolding attack path and predicts imminent lateral movement.</p>
+    <div className="h-full flex flex-col space-y-4 animate-fade-in p-4 overflow-auto">
+
+      {/* HEADER */}
+      <div className="flex items-center space-x-3">
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+          isDark ? 'bg-violet-500/10 border border-violet-500/20' : 'bg-violet-50'
+        }`}>
+          <Brain size={20} className={isDark ? 'text-violet-400' : 'text-violet-600'} />
+        </div>
+        <div>
+          <h1 className={`text-xl font-bold ${ isDark ? 'text-slate-100' : 'text-slate-800'}`}>AI Attack Forecasting</h1>
+          <p className={`text-xs ${ isDark ? 'text-slate-600' : 'text-slate-400'}`}>Real-time predictive threat intelligence · Method: {fc.method}</p>
+        </div>
+      </div>
+
+      {/* TOP ROW: 3 cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+        {/* Current Stage */}
+        <div className={`rounded-2xl border p-5 ${
+          isDark ? `bg-[#0A0A12] ${stageBg(fc.currentStage, isDark)}` : `bg-white ${stageBg(fc.currentStage, isDark)} shadow-sm`
+        }`}>
+          <div className={`text-[10px] font-bold uppercase tracking-widest mb-3 ${
+            isDark ? 'text-slate-600' : 'text-slate-400'
+          }`}>Current Attack Stage</div>
+          <div className={`text-2xl font-bold mb-2 ${stageColor(fc.currentStage, isDark)}`}>
+            {fc.currentStage}
+          </div>
+          <div style={{ height: 120 }}>
+            <ReactECharts option={gaugeOption} style={{ height: '100%', width: '100%' }} />
+          </div>
+          <div className="mt-2 space-y-2">
+            <div className={`flex items-center space-x-2 text-xs ${
+              isDark ? 'text-slate-500' : 'text-slate-500'
+            }`}>
+              <Cpu size={11} />
+              <span>Attacker: <code className={`font-mono ${ isDark ? 'text-cyan-400' : 'text-cyan-700'}`}>{fc.sourceIp}</code></span>
+            </div>
+            <div className={`flex items-center space-x-2 text-xs ${
+              isDark ? 'text-slate-500' : 'text-slate-500'
+            }`}>
+              <Clock size={11} />
+              <span>Detected at {new Date(fc.timestamp).toLocaleTimeString()}</span>
+            </div>
           </div>
         </div>
-        <div className="flex gap-2">
-          <Badge variant="critical">INC-001</Badge>
-          <Badge variant="high">CONFIDENCE: 92%</Badge>
-        </div>
-      </div>
 
-      <div className="flex-1 grid grid-cols-12 gap-4 min-h-0">
-        
-        {/* Left: Current State */}
-        <div className="col-span-3 flex flex-col gap-4">
-          <Panel title="Current Attack State" className="flex-1">
-            <div className="flex flex-col items-center text-center p-2">
-              <ShieldAlert size={48} className={isDark ? 'text-red-500 mb-4' : 'text-red-600 mb-4'} />
-              <div className={`text-sm font-semibold mb-1 ${isDark ? 'text-gray-400 font-mono uppercase' : 'text-slate-500'}`}>OBSERVED STAGE</div>
-              <div className={`text-2xl font-bold mb-6 ${isDark ? 'text-gray-100' : 'text-slate-800'}`}>{forecast.currentStage}</div>
-              
-              <div className="w-full space-y-2">
-                <div className="flex justify-between text-xs font-semibold">
-                  <span className={isDark ? 'text-gray-500' : 'text-slate-500'}>Model Confidence</span>
-                  <span className={isDark ? 'text-emerald-400 font-mono' : 'text-emerald-600 font-mono'}>{(forecast.stageConfidence * 100).toFixed(0)}%</span>
-                </div>
-                <div className={`w-full h-2 rounded-full overflow-hidden ${isDark ? 'bg-gray-900' : 'bg-slate-100'}`}>
-                  <div className="bg-emerald-500 h-full" style={{ width: `${forecast.stageConfidence * 100}%` }} />
-                </div>
-              </div>
-
-              <div className={`mt-8 p-4 rounded-xl w-full text-left border ${isDark ? 'bg-gray-900/50 border-gray-800' : 'bg-slate-50 border-slate-200'}`}>
-                <div className={`text-xs font-semibold mb-1 flex items-center gap-2 ${isDark ? 'text-gray-500' : 'text-slate-500'}`}><Activity size={14}/> Time in Stage</div>
-                <div className={`font-mono ${isDark ? 'text-gray-200' : 'text-slate-700 font-semibold'}`}>{forecast.timeInStage}</div>
-              </div>
-            </div>
-          </Panel>
+        {/* Next Stage Predictions */}
+        <div className={`rounded-2xl border p-5 ${
+          isDark ? 'bg-[#0A0A12] border-white/[0.06]' : 'bg-white border-slate-100 shadow-sm'
+        }`}>
+          <div className={`text-[10px] font-bold uppercase tracking-widest mb-3 ${
+            isDark ? 'text-slate-600' : 'text-slate-400'
+          }`}>Predicted Next Stages</div>
+          <div style={{ height: 160 }}>
+            <ReactECharts option={barOption} style={{ height: '100%', width: '100%' }} />
+          </div>
+          <div className={`mt-3 text-[10px] ${ isDark ? 'text-slate-700' : 'text-slate-400'}`}>
+            ⚠ Heuristic transition weights · Not a calibrated probability model
+          </div>
         </div>
 
-        {/* Center: Next Stages */}
-        <div className="col-span-5 flex flex-col gap-4">
-          <Panel title="Predicted Next Stages" className="flex-1">
-            <div className="space-y-4">
-              {forecast.nextStages.map((stage, idx) => (
-                <div key={idx} className={`p-4 rounded-xl border ${isDark ? 'bg-gray-900/50 border-gray-800' : 'bg-slate-50 border-slate-200'}`}>
-                  <div className="flex justify-between items-center mb-3">
-                    <div className={`font-bold ${isDark ? 'text-gray-200' : 'text-slate-800'}`}>{stage.stage}</div>
-                    <div className="flex gap-3 items-center">
-                      <span className={`text-xs font-semibold ${isDark ? 'text-gray-500 font-mono' : 'text-slate-500'}`}>{stage.horizon}</span>
-                      <span className={`font-mono font-bold ${idx === 0 ? 'text-orange-500 text-lg' : (isDark ? 'text-gray-400' : 'text-slate-400')}`}>
-                        {(stage.probability * 100).toFixed(0)}%
-                      </span>
+        {/* Target Predictions */}
+        <div className={`rounded-2xl border p-5 ${
+          isDark ? 'bg-[#0A0A12] border-white/[0.06]' : 'bg-white border-slate-100 shadow-sm'
+        }`}>
+          <div className={`text-[10px] font-bold uppercase tracking-widest mb-3 ${
+            isDark ? 'text-slate-600' : 'text-slate-400'
+          }`}>Predicted Target Hosts</div>
+          <div className="space-y-4">
+            {fc.targetPredictions.map((t: any, i: number) => (
+              <div key={t.hostId}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center space-x-2">
+                    <div className={`w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold ${
+                      i === 0
+                        ? isDark ? 'bg-red-500/20 text-red-400' : 'bg-red-50 text-red-600'
+                        : isDark ? 'bg-white/[0.05] text-slate-500' : 'bg-slate-100 text-slate-500'
+                    }`}>{i + 1}</div>
+                    <div>
+                      <div className={`text-xs font-semibold ${ isDark ? 'text-slate-200' : 'text-slate-800'}`}>{t.hostname}</div>
+                      <div className={`font-mono text-[10px] ${ isDark ? 'text-slate-600' : 'text-slate-400'}`}>{t.ip}</div>
                     </div>
                   </div>
-                  <div className={`w-full h-2 rounded-full overflow-hidden ${isDark ? 'bg-gray-950' : 'bg-slate-200'}`}>
-                    <div 
-                      className={`h-full ${idx === 0 ? 'bg-orange-500' : (isDark ? 'bg-gray-600' : 'bg-slate-400')}`} 
-                      style={{ width: `${stage.probability * 100}%` }} 
-                    />
-                  </div>
+                  <span className={`text-xs font-bold ${
+                    t.probability > 0.5
+                      ? isDark ? 'text-red-400' : 'text-red-600'
+                      : isDark ? 'text-orange-400' : 'text-orange-600'
+                  }`}>{(t.probability * 100).toFixed(0)}%</span>
                 </div>
-              ))}
-            </div>
-
-            <div className="mt-8">
-              <h4 className={`text-xs font-semibold uppercase tracking-wider mb-3 ${isDark ? 'text-gray-500' : 'text-slate-500'}`}>Forecast Evidence</h4>
-              <ul className="space-y-3">
-                {forecast.evidence.map((ev, idx) => (
-                  <li key={idx} className={`text-sm flex items-start gap-3 ${isDark ? 'text-gray-300' : 'text-slate-700 font-medium'}`}>
-                    <div className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0" />
-                    {ev}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </Panel>
-        </div>
-
-        {/* Right: Targets */}
-        <div className="col-span-4 flex flex-col gap-4">
-          <Panel title="Predicted Targets" className="flex-1">
-            <div className="space-y-4">
-              {forecast.targets.map((target, idx) => (
-                <div key={idx} className={`flex items-center gap-4 p-3 rounded-xl transition-colors border ${
-                  isDark ? 'hover:bg-gray-800/50 border-transparent hover:border-gray-800' : 'hover:bg-slate-50 border-transparent hover:border-slate-200'
+                <div className={`h-1.5 rounded-full overflow-hidden ${
+                  isDark ? 'bg-white/[0.05]' : 'bg-slate-100'
                 }`}>
-                  <Server size={24} className={idx === 0 ? 'text-red-500' : (isDark ? 'text-gray-500' : 'text-slate-400')} />
-                  <div className="flex-1 min-w-0">
-                    <div className={`text-sm font-bold truncate ${isDark ? 'text-gray-200' : 'text-slate-800'}`}>{target.name}</div>
-                    <div className={`text-xs font-mono ${isDark ? 'text-gray-500' : 'text-slate-500'}`}>{target.ip}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className={`font-mono font-bold ${idx === 0 ? 'text-red-400' : (isDark ? 'text-gray-400' : 'text-slate-500')}`}>
-                      {(target.probability * 100).toFixed(0)}%
-                    </div>
-                    <div className={`text-[10px] uppercase font-semibold ${isDark ? 'text-gray-500' : 'text-slate-400'}`}>Risk</div>
-                  </div>
+                  <div
+                    className={`h-full rounded-full ${
+                      i === 0 ? 'bg-red-500' : i === 1 ? 'bg-orange-500' : 'bg-yellow-500'
+                    }`}
+                    style={{ width: `${t.probability * 100}%`, transition: 'width 1s ease' }}
+                  />
                 </div>
-              ))}
-            </div>
-            
-            <div className={`mt-8 p-6 rounded-xl flex flex-col items-center justify-center text-center border ${
-              isDark ? 'border-gray-800 bg-gray-950' : 'border-slate-200 bg-slate-50'
-            }`}>
-               <Network size={32} className={`mb-3 ${isDark ? 'text-gray-600' : 'text-slate-400'}`} />
-               <div className={`text-sm font-medium ${isDark ? 'text-gray-400' : 'text-slate-600'}`}>View attack path in Topology</div>
-               <button className={`mt-4 text-xs px-4 py-2 font-semibold rounded-lg transition-colors ${
-                 isDark ? 'bg-gray-800 hover:bg-gray-700 text-gray-200' : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 shadow-sm'
-               }`}>
-                 Open Topology View
-               </button>
-            </div>
-          </Panel>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
+
+      {/* KILL CHAIN TIMELINE */}
+      <div className={`rounded-2xl border p-5 ${
+        isDark ? 'bg-[#0A0A12] border-white/[0.06]' : 'bg-white border-slate-100 shadow-sm'
+      }`}>
+        <div className={`text-[10px] font-bold uppercase tracking-widest mb-4 ${
+          isDark ? 'text-slate-600' : 'text-slate-400'
+        }`}>MITRE ATT&CK Kill Chain Progress</div>
+        <div className="flex items-center space-x-1 overflow-x-auto custom-scrollbar pb-2">
+          {KILL_CHAIN.map((stage, idx) => {
+            const isCurrent = idx === currentIdx;
+            const isPast = idx < currentIdx;
+            const isPredicted = fc.nextStages.some((s: any) => s.stage === stage);
+            const predProb = fc.nextStages.find((s: any) => s.stage === stage)?.probability ?? 0;
+
+            return (
+              <div key={stage} className="flex items-center shrink-0">
+                <div className={`px-3 py-2 rounded-xl text-center border transition-all ${
+                  isCurrent
+                    ? isDark
+                      ? 'bg-red-500/20 border-red-500/40 shadow-[0_0_12px_rgba(239,68,68,0.3)]'
+                      : 'bg-red-50 border-red-300 shadow-sm shadow-red-100'
+                    : isPast
+                      ? isDark ? 'bg-white/[0.04] border-white/[0.08]' : 'bg-slate-100 border-slate-200'
+                      : isPredicted
+                        ? isDark
+                          ? 'bg-orange-500/10 border-orange-500/20 border-dashed'
+                          : 'bg-orange-50 border-orange-200 border-dashed'
+                        : isDark ? 'bg-transparent border-white/[0.04]' : 'bg-transparent border-slate-100'
+                }`}>
+                  <div className={`text-[9px] font-bold uppercase tracking-wider whitespace-nowrap ${
+                    isCurrent
+                      ? isDark ? 'text-red-400' : 'text-red-700'
+                      : isPast
+                        ? isDark ? 'text-slate-500' : 'text-slate-400'
+                        : isPredicted
+                          ? isDark ? 'text-orange-400' : 'text-orange-600'
+                          : isDark ? 'text-slate-700' : 'text-slate-300'
+                  }`}>
+                    {isCurrent && <span className="mr-1">▶</span>}
+                    {isPredicted && !isCurrent && <span className="mr-1">◈</span>}
+                    {stage}
+                  </div>
+                  {isPredicted && !isCurrent && (
+                    <div className={`text-[9px] font-bold mt-0.5 ${ isDark ? 'text-orange-500' : 'text-orange-600'}`}>
+                      {(predProb * 100).toFixed(0)}%
+                    </div>
+                  )}
+                </div>
+                {idx < KILL_CHAIN.length - 1 && (
+                  <div className={`h-px w-3 mx-0.5 ${
+                    isPast || isCurrent
+                      ? isDark ? 'bg-red-500/40' : 'bg-red-200'
+                      : isDark ? 'bg-white/[0.06]' : 'bg-slate-200'
+                  }`} />
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex items-center space-x-6 mt-3">
+          {[
+            { color: isDark ? 'bg-red-500/20 border-red-500/40' : 'bg-red-50 border-red-300', label: 'Current Stage', border: 'border' },
+            { color: isDark ? 'bg-orange-500/10 border-orange-500/20' : 'bg-orange-50 border-orange-200', label: 'Predicted Next', border: 'border border-dashed' },
+            { color: isDark ? 'bg-white/[0.04] border-white/[0.08]' : 'bg-slate-100 border-slate-200', label: 'Observed / Past', border: 'border' },
+          ].map((l, i) => (
+            <div key={i} className="flex items-center space-x-2 text-[10px]">
+              <div className={`w-5 h-3 rounded-sm ${l.color} ${l.border}`} />
+              <span className={isDark ? 'text-slate-600' : 'text-slate-400'}>{l.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Explanation */}
+      <div className={`rounded-2xl border p-5 ${
+        isDark ? 'bg-[#0A0A12] border-white/[0.06]' : 'bg-white border-slate-100 shadow-sm'
+      }`}>
+        <div className={`text-[10px] font-bold uppercase tracking-widest mb-2 ${
+          isDark ? 'text-slate-600' : 'text-slate-400'
+        }`}>Forecast Reasoning</div>
+        <p className={`text-sm leading-relaxed ${ isDark ? 'text-slate-400' : 'text-slate-600'}`}>{fc.explanation}</p>
+      </div>
+
     </div>
   );
 };

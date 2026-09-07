@@ -1,10 +1,12 @@
-"""SQLite workbench. ML inference is used for risk scoring when the trained
-artifact is available. Detection rules are used as a secondary signal.
+"""SQLite workbench with rule detection and optional uncalibrated ML scores.
 
 Historical packet timestamps and ingestion timestamps are distinct. No telemetry
 is fabricated unless NETRA_SEED_DEMO=true is explicitly configured.
 """
 import json
+import base64
+import hashlib
+import struct
 import os
 import re
 import shutil
@@ -29,6 +31,21 @@ def now():
 
 def host_id(ip):
     return str(uuid5(NAMESPACE_DNS, f"netra:{ip}"))
+
+
+def community_id(flow):
+    """Community ID v1 for TCP/UDP. ICMP needs type/code metadata we do not infer."""
+    protocol = {"TCP": 6, "UDP": 17}.get(flow["protocol"])
+    if protocol is None:
+        return None
+    source, target = ip_address(flow["srcIp"]).packed, ip_address(flow["dstIp"]).packed
+    if len(source) != len(target):
+        return None
+    sport, dport = flow["srcPort"], flow["dstPort"]
+    if (source, sport) > (target, dport):
+        source, target, sport, dport = target, source, dport, sport
+    digest = hashlib.sha1(struct.pack("!H", 0) + source + target + struct.pack("!BBHH", protocol, 0, sport, dport)).digest()
+    return "1:" + base64.b64encode(digest).decode("ascii")
 
 class Store:
     def __init__(self, path=None, seed_demo=None):
@@ -94,8 +111,16 @@ class Store:
         # Retain imported historical captures for N days after ingestion.
         cutoff = (datetime.now(timezone.utc) - timedelta(days=self.settings()["retentionDays"])).isoformat()
         with self.lock, self.db:
+            # Incident reports and forecast evaluation must not lose their evidence.
+            # Evidence retention is intentionally independent of routine telemetry.
+            pinned_alerts = {aid for incident in self.all("incidents") for aid in incident.get("alertIds", [])}
+            pinned_flows = {alert["flowId"] for alert in self.all("alerts") if alert["id"] in pinned_alerts}
+            pinned_flows.update(forecast["outcome"]["flowId"] for forecast in self.all("forecasts") if forecast.get("outcome"))
+            pinned_flows.update(fid for forecast in self.all("forecasts") for fid in forecast.get("evidenceFlowIds", []))
             for kind in ("flows", "alerts"):
                 for record in self.all(kind):
+                    if record["id"] in (pinned_flows if kind == "flows" else pinned_alerts):
+                        continue
                     if record.get("ingestedAt", record["timestamp"]) < cutoff:
                         self.db.execute("DELETE FROM entities WHERE kind=? AND id=?", (kind, record["id"]))
 
@@ -109,11 +134,21 @@ class Store:
             return record
 
     def ingest(self, inputs):
-        result = {"accepted": len(inputs), "alertsCreated": 0, "incidentsCreated": 0, "flows": []}
+        result = {"accepted": 0, "duplicates": 0, "alertsCreated": 0, "incidentsCreated": 0, "flows": []}
         with self.lock, self.db:
             recent = self.all("flows")
+            prior_forecasts = self.all("forecasts")
+            changed_incidents = {}
+            seen_events = {(f["source"], f["eventId"]) for f in recent if f.get("eventId")}
             hosts = {host["ip"]: host for host in self.all("hosts")}
             for entry in inputs:
+                event_key = (entry.get("source", "ingested"), entry.get("eventId"))
+                if event_key[1] and event_key in seen_events:
+                    result["duplicates"] += 1
+                    continue
+                if event_key[1]:
+                    seen_events.add(event_key)
+                result["accepted"] += 1
                 timestamp = datetime.fromisoformat(entry.get("timestamp", now()).replace("Z", "+00:00")).astimezone(timezone.utc).isoformat()
                 # Run ML inference first
                 ml = _ml_predict_flow(entry)
@@ -126,11 +161,18 @@ class Store:
                         "riskScore": ml_risk,
                         "anomalyScore": ml_anomaly / 100,
                         "mlConfidence": ml_conf,
+                        "mlRiskScore": ml_risk, "mlAttackType": ml_attack,
+                        "mlAnomalyScore": ml_anomaly, "mlReason": ml.get("mlReason"),
                         "mlAvailable": ml.get('mlAvailable', False),
                         "attackType": ml_attack,
                         "appProtocol": {22:"SSH", 53:"DNS", 80:"HTTP", 443:"TLS", 445:"SMB", 3389:"RDP"}.get(entry["dstPort"], entry["protocol"]),
                         "source": entry.get("source", "ingested"), "synthetic": entry.get("source", "").startswith("demo"),
-                        "protocolEvidence": "ML-scored; destination-port inference for appProtocol"}
+                        "protocolEvidence": "Destination-port inference; payload protocol not verified",
+                        "mlCalibrated": False, "mlMethod": ml.get("mlMethod", "unavailable"),
+                        "mlTrainingData": ml.get("mlTrainingData", "unknown"),
+                        "riskMeaning": "Uncalibrated investigation priority; a match does not prove compromise",
+                        "communityId": entry.get("communityId") or community_id(entry),
+                        "communityIdSource": "collector" if entry.get("communityId") else "computed-five-tuple" if entry["protocol"] in ("TCP", "UDP") else "unavailable"}
                 rule = None
                 moment = datetime.fromisoformat(timestamp)
                 same_source = [f for f in recent if f["srcIp"] == flow["srcIp"] and 0 <= (moment-datetime.fromisoformat(f["timestamp"])).total_seconds() <= 300]
@@ -139,12 +181,12 @@ class Store:
                     rule = ("Reconnaissance", "Port fan-out: at least 8 destination ports within 5 minutes", "high", 72, "Discovery", "T1046")
                 if flow["dstPort"] in (445, 3389) and flow["packets"] >= 20:
                     rule = ("Lateral Movement", "Remote service activity on SMB/RDP", "high", 78, "Lateral Movement", "T1021")
-                if flow["bytes"] >= 5_000_000 and not ip_address(flow["dstIp"]).is_private:
+                if flow["bytes"] >= 5_000_000 and ip_address(flow["srcIp"]).is_private and ip_address(flow["dstIp"]).is_global:
                     rule = ("Exfiltration", "Large outbound transfer to an external address", "critical", 92, "Exfiltration", "T1041")
                 if flow["duration"] > 0 and flow["packets"] >= 1000 and flow["packets"] / flow["duration"] >= 10000:
                     rule = ("Impact", "High packet rate: at least 10,000 packets per second", "critical", 95, "Impact", "T1498")
                 if rule:
-                    flow.update(attackType=rule[0], riskScore=rule[3], anomalyScore=rule[3]/100, detectionReason=rule[1])
+                    flow.update(attackType=rule[0], riskScore=max(ml_risk, rule[3]), ruleRiskScore=rule[3], detectionReason=rule[1])
                 for ip, port in ((flow["srcIp"], flow["srcPort"]), (flow["dstIp"], flow["dstPort"])):
                     host = hosts.get(ip) or {"id": host_id(ip), "ip": ip, "hostname": ip, "deviceType": "unknown", "criticality": "medium", "firstSeen": timestamp, "lastSeen": timestamp, "riskScore": 0, "openPorts": [], "protocols": [], "synthetic": flow["synthetic"], "identityConfidence": 1.0, "deviceTypeConfidence": 0, "evidence": "Observed IP in ingested flow; device role unknown", "portSemantics": "Observed destination ports, not verified listening services"}
                     host.update(firstSeen=min(host["firstSeen"], timestamp), lastSeen=max(host["lastSeen"], timestamp), riskScore=max(host["riskScore"], flow["riskScore"]), synthetic=host["synthetic"] and flow["synthetic"])
@@ -158,7 +200,7 @@ class Store:
                 recent.append(flow)
                 result["flows"].append(flow)
                 if rule:
-                    self.match_forecasts(flow)
+                    self.match_forecasts(flow, prior_forecasts)
                     alert = {"id": str(uuid4()), "timestamp": timestamp, "ingestedAt": flow["ingestedAt"], "severity": rule[2], "source": "heuristic-rules", "signature": rule[1], "srcIp": flow["srcIp"], "dstIp": flow["dstIp"], "protocol": flow["protocol"], "mitreTactic": rule[4], "mitreTechnique": rule[5], "confidence": rule[3]/100, "status": "new", "flowId": flow["id"], "synthetic": flow["synthetic"], "confidenceMeaning": "Rule priority score, not a calibrated probability. Legitimate activity can match."}
                     self.put("alerts", alert)
                     result["alertsCreated"] += 1
@@ -174,22 +216,29 @@ class Store:
                     incident["affectedHosts"] = sorted(set(incident["affectedHosts"] + [host_id(flow["srcIp"]), host_id(flow["dstIp"])]))
                     incident["alertIds"].append(alert["id"])
                     self.put("incidents", incident)
-                    snapshot = self.build_forecast(incident)
-                    self.put("forecasts", snapshot)
-            self.audit("flows.ingest", "batch", None, {"accepted": len(inputs), "sources": sorted({f["source"] for f in result["flows"]})})
+                    changed_incidents[incident["id"]] = incident
+            # Every submitted batch is already known: do not pretend its later rows
+            # are future observations of a forecast generated from earlier rows.
+            for incident in changed_incidents.values():
+                self.put("forecasts", self.build_forecast(incident))
+            self.audit("flows.ingest", "batch", None, {"accepted": result["accepted"], "duplicates": result["duplicates"], "sources": sorted({f["source"] for f in result["flows"]})})
         self.prune()
         return result
 
-    def match_forecasts(self, flow):
-        for forecast in self.all("forecasts"):
+    def match_forecasts(self, flow, forecasts=None):
+        for forecast in forecasts if forecasts is not None else self.all("forecasts"):
             if forecast.get("outcome") or forecast["sourceIp"] != flow["srcIp"]:
                 continue
             if flow["timestamp"] <= forecast["evidenceThrough"] or flow["ingestedAt"] <= forecast["timestamp"]:
                 continue
+            if (datetime.fromisoformat(flow["timestamp"])-datetime.fromisoformat(forecast["evidenceThrough"])).total_seconds() > 1800:
+                continue
             if flow["attackType"] not in [s["stage"] for s in forecast["nextStages"]]:
                 continue
             elapsed = (datetime.fromisoformat(flow["ingestedAt"])-datetime.fromisoformat(forecast["timestamp"])).total_seconds()
-            forecast["outcome"] = {"flowId": flow["id"], "observedStage": flow["attackType"], "observedAt": flow["ingestedAt"], "eventTimestamp": flow["timestamp"], "leadTimeSeconds": elapsed, "evaluation": "Later ingested rule match, not ground truth or model accuracy", "synthetic": flow["synthetic"]}
+            event_lead = (datetime.fromisoformat(flow["timestamp"])-datetime.fromisoformat(forecast["timestamp"])).total_seconds()
+            prospective = event_lead > 0 and not flow["synthetic"] and not forecast.get("synthetic", False)
+            forecast["outcome"] = {"flowId": flow["id"], "observedStage": flow["attackType"], "observedAt": flow["ingestedAt"], "eventTimestamp": flow["timestamp"], "leadTimeSeconds": event_lead if prospective else None, "ingestionDelaySeconds": elapsed, "prospective": prospective, "evaluation": "Later rule match; not independently labeled ground truth. Historical/synthetic replay has no prospective lead time.", "synthetic": flow["synthetic"]}
             self.put("forecasts", forecast)
 
     def host_detail(self, entity_id):
@@ -222,9 +271,12 @@ class Store:
     def build_forecast(self, incident=None):
         stage = incident["stage"] if incident else "No active incident"
         transitions = {"Reconnaissance": [("Initial Access", .55), ("Lateral Movement", .30), ("Impact", .15)], "Lateral Movement": [("Collection", .50), ("Exfiltration", .35), ("Impact", .15)], "Exfiltration": [("Impact", .60), ("Persistence", .40)], "Impact": [("Persistence", .55), ("Exfiltration", .45)]}
-        targets = sorted(self.all("hosts"), key=lambda h: h["riskScore"], reverse=True)[:5] if incident else []
+        alerts = [a for a in self.all("alerts") if incident and a["id"] in incident["alertIds"]]
+        evidence_ids = [a["flowId"] for a in alerts]
+        targets = sorted([h for h in self.all("hosts") if incident and h["id"] in incident["affectedHosts"] and h["ip"] != incident["sourceIp"]], key=lambda h: h["riskScore"], reverse=True)[:5]
         total = sum(h["riskScore"] + 1 for h in targets) or 1
-        return {"id": str(uuid4()) if incident else "heuristic-idle", "timestamp": now(), "evidenceThrough": incident["updatedAt"] if incident else None, "incidentId": incident["id"] if incident else None, "sourceIp": incident["sourceIp"] if incident else None, "currentStage": stage, "stageConfidence": .7 if incident else 0, "nextStages": [{"stage": s, "probability": p} for s,p in transitions.get(stage, [])], "targetPredictions": [{"hostId": h["id"], "ip": h["ip"], "probability": round((h["riskScore"]+1)/total, 4)} for h in targets], "method": "heuristic-transition-rules", "calibrated": False, "synthetic": incident["synthetic"] if incident else False, "explanation": "Fixed stage weights and normalized historical host risk are investigation priorities, not validated attack probabilities. Snapshots precede later ingestion; outcome lead time uses ingestion wall clock."}
+        latest_alert = max(alerts, key=lambda a: a["timestamp"]) if alerts else None
+        return {"id": str(uuid4()) if incident else "heuristic-idle", "timestamp": now(), "evidenceThrough": incident["updatedAt"] if incident else None, "evidenceFlowIds": evidence_ids, "incidentId": incident["id"] if incident else None, "sourceIp": incident["sourceIp"] if incident else None, "currentStage": stage, "stageConfidence": latest_alert["confidence"] if latest_alert else 0, "nextStages": [{"stage": s, "probability": p} for s,p in transitions.get(stage, [])], "targetPredictions": [{"hostId": h["id"], "ip": h["ip"], "probability": round((h["riskScore"]+1)/total, 4)} for h in targets], "method": "heuristic-transition-rules", "calibrated": False, "synthetic": incident["synthetic"] if incident else False, "explanation": "Fixed stage weights and normalized affected-host risk are investigation priorities, not validated probabilities. Snapshots are recorded after each batch. Prospective lead time requires a later real event; historical/synthetic replay is labeled separately."}
 
     def forecast(self):
         active = {i["id"] for i in self.all("incidents") if i["status"] in ("active", "investigating")}
@@ -239,8 +291,8 @@ class Store:
         ml_info = _ml_status()
         inference_status = "ml-ensemble" if ml_info.get('available') else "heuristic-rules"
         return {
-            "status": "operational" if ml_info.get('available') else "degraded",
-            "components": {"database": "up", "capture": "down", "mlInference": "up" if ml_info.get('available') else "unavailable"},
+            "status": "degraded",
+            "components": {"database": "up", "capture": "down", "inference": "up", "mlInference": "up" if ml_info.get('available') else "unavailable"},
             "metrics": {"cpu": psutil.cpu_percent(), "memory": psutil.virtual_memory().percent, "disk": round(usage.used/usage.total*100, 1)},
             "mode": "local",
             "inferenceMethod": inference_status,
@@ -293,20 +345,94 @@ class Store:
         return {"events": events, "total": len(events), "mode": "recorded-alert-timeline"}
 
     def seed(self):
-        base = datetime.now(timezone.utc) - timedelta(minutes=12)
+        base = datetime.now(timezone.utc) - timedelta(minutes=60)
         flows = []
-        for i in range(36):
-            flows.append({"srcIp": f"10.42.0.{10+i%5}", "dstIp": "10.42.0.20" if i%2 else "1.1.1.1", "srcPort": 40000+i, "dstPort": 443 if i%2 else 53, "protocol": "TCP" if i%2 else "UDP", "packets": 30+i, "bytes": 12000+i*500, "duration": 3+i/10, "timestamp": (base+timedelta(seconds=i*10)).isoformat(), "source": "demo-seed"})
-        for i, port in enumerate((21,22,23,25,53,80,135,139,389,443)):
-            flows.append({"srcIp": "10.42.0.10", "dstIp": "10.42.0.20", "srcPort": 50000+i, "dstPort": port, "protocol": "TCP", "packets": 3, "bytes": 180, "duration": .2, "timestamp": (base+timedelta(seconds=400+i*5)).isoformat(), "source": "demo-seed"})
-        for offset, dst, port, size in ((480,"10.42.0.21",445,95000), (540,"8.8.8.8",443,8_000_000)):
-            flows.append({"srcIp": "10.42.0.10", "dstIp": dst, "srcPort": 52000, "dstPort": port, "protocol": "TCP", "packets": 200, "bytes": size, "duration": 10, "timestamp": (base+timedelta(seconds=offset)).isoformat(), "source": "demo-seed"})
+        
+        # 1. Normal Background Noise (100+ flows)
+        for i in range(150):
+            flows.append({
+                "srcIp": f"10.42.0.{10 + i % 15}",
+                "dstIp": "1.1.1.1" if i % 3 == 0 else "10.42.0.20",
+                "srcPort": 40000 + i,
+                "dstPort": 443 if i % 2 == 0 else (53 if i % 3 == 0 else 80),
+                "protocol": "TCP" if i % 3 != 0 else "UDP",
+                "packets": 5 + (i % 20),
+                "bytes": 500 + (i * 100),
+                "duration": 0.5 + (i % 5),
+                "timestamp": (base + timedelta(seconds=i * 20)).isoformat(),
+                "source": "demo-seed"
+            })
+
+        # 2. Reconnaissance: Intense Port Scan from Attacker (10.42.0.50 -> 10.42.0.20 Web Server)
+        scan_base = base + timedelta(minutes=45)
+        for i, port in enumerate(range(1, 1024)):
+            flows.append({
+                "srcIp": "10.42.0.50", "dstIp": "10.42.0.20",
+                "srcPort": 50000 + i, "dstPort": port,
+                "protocol": "TCP", "packets": 3, "bytes": 180, "duration": 0.1,
+                "timestamp": (scan_base + timedelta(milliseconds=i * 50)).isoformat(),
+                "source": "demo-seed"
+            })
+
+        # 3. Lateral Movement: SMB Brute Force & Transfer (10.42.0.20 -> 10.42.0.21 File Server)
+        lateral_base = base + timedelta(minutes=50)
+        for i in range(25):
+            flows.append({
+                "srcIp": "10.42.0.20", "dstIp": "10.42.0.21",
+                "srcPort": 55000 + i, "dstPort": 445,
+                "protocol": "TCP", "packets": 15, "bytes": 1500, "duration": 2.5,
+                "timestamp": (lateral_base + timedelta(seconds=i * 2)).isoformat(),
+                "source": "demo-seed"
+            })
+        # Payload transfer
+        flows.append({
+            "srcIp": "10.42.0.20", "dstIp": "10.42.0.21",
+            "srcPort": 55026, "dstPort": 445,
+            "protocol": "TCP", "packets": 4500, "bytes": 4500000, "duration": 45.0,
+            "timestamp": (lateral_base + timedelta(seconds=60)).isoformat(),
+            "source": "demo-seed"
+        })
+
+        # 4. Command & Control and Exfiltration: (10.42.0.21 -> 185.10.10.5 Malicious IP)
+        exfil_base = base + timedelta(minutes=55)
+        # C2 Beacons
+        for i in range(10):
+            flows.append({
+                "srcIp": "10.42.0.21", "dstIp": "185.10.10.5",
+                "srcPort": 49100 + i, "dstPort": 443,
+                "protocol": "TCP", "packets": 12, "bytes": 800, "duration": 5.0,
+                "timestamp": (exfil_base + timedelta(seconds=i * 30)).isoformat(),
+                "source": "demo-seed"
+            })
+        # Massive Exfiltration
+        flows.append({
+            "srcIp": "10.42.0.21", "dstIp": "185.10.10.5",
+            "srcPort": 49200, "dstPort": 443,
+            "protocol": "TCP", "packets": 150000, "bytes": 850000000, "duration": 180.0,
+            "timestamp": (exfil_base + timedelta(minutes=2)).isoformat(),
+            "source": "demo-seed"
+        })
+
         self.ingest(flows)
+        
         with self.lock, self.db:
-            names = {"10.42.0.10": ("analyst-workstation", "workstation"), "10.42.0.20": ("web-server", "server"), "10.42.0.21": ("file-server", "server")}
+            names = {
+                "10.42.0.20": ("dmz-web-server", "server"), 
+                "10.42.0.21": ("internal-file-server", "server"),
+                "10.42.0.50": ("compromised-vendor-vpn", "workstation"),
+                "185.10.10.5": ("known-apt-c2", "external")
+            }
             for host in self.all("hosts"):
                 if host["ip"] in names:
                     host["hostname"], host["deviceType"] = names[host["ip"]]
                     host["evidence"] = "Explicit synthetic scenario label"
                     self.put("hosts", host)
+            
+            # Enrich Incidents for Demo
+            for inc in self.all("incidents"):
+                if inc["severity"] == "critical":
+                    inc["status"] = "investigating"
+                    inc["title"] = "APT29 Suspected Data Exfiltration via DMZ"
+                    self.put("incidents", inc)
+                    
             self.put("metadata", {"id": "seed", "createdAt": now(), "synthetic": True})

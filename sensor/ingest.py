@@ -39,7 +39,8 @@ def preserve_evidence(path, evidence_dir):
             json.dump(manifest, stream, indent=2)
     except FileExistsError:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if manifest.get("sha256") != sha256:
+        if (manifest.get("sha256") != sha256 or manifest.get("storedName") != destination.name
+                or manifest.get("sizeBytes") != destination.stat().st_size):
             raise ValueError("Stored evidence manifest does not match evidence")
     return manifest
 
@@ -67,6 +68,8 @@ def packet_flow(packet, source="pcap-import"):
 
 def read_pcap(path):
     """Stream PCAP or PCAPNG, aggregate directional 5-tuples in bounded chunks."""
+    # Register dissectors before the reader decodes the first frame in a fresh process.
+    from scapy.layers import inet, inet6, l2
     from scapy.utils import PcapReader
     flows = {}
     with PcapReader(str(path)) as packets:
@@ -90,6 +93,8 @@ def read_pcap(path):
 
 
 def read_logs(path, kind):
+    if kind not in ("zeek", "suricata"):
+        raise ValueError("Log format must be zeek or suricata")
     normalizer = EventNormalizer("file-import")
     watcher = ZeekLogWatcher(str(Path(path).parent)) if kind == "zeek" else None
     with Path(path).open(encoding="utf-8", errors="replace") as stream:
@@ -141,19 +146,48 @@ def read_logs(path, kind):
 
 
 def packet_summaries(path, offset=0, limit=100):
-    """Paginate actual packets for a PCAP explorer; decoded payload is not invented."""
-    from scapy.utils import PcapReader
+    """Return a bounded page of actual packets, including non-IP frames."""
+    from itertools import islice
     if offset < 0 or not 1 <= limit <= 1000:
         raise ValueError("offset must be nonnegative; limit must be 1..1000")
-    result = []
+    return list(islice(read_packet_summaries(path), offset, offset + limit))
+
+
+def read_packet_summaries(path):
+    """Stream decoded PCAP/PCAPNG frames with at most 2048 raw bytes per frame.
+
+    Layer values are display strings capped at 256 characters. The raw preview
+    is captured bytes, not reconstructed protocol or application content.
+    """
+    from scapy.layers import inet, inet6, l2
+    from scapy.utils import PcapReader
+    from scapy.packet import NoPayload
+    from scapy.layers.l2 import ARP
     with PcapReader(str(path)) as packets:
-        for index, packet in enumerate(packets):
-            if index < offset:
-                continue
-            if len(result) >= limit:
-                break
+        for index, packet in enumerate(packets, 1):
             flow = packet_flow(packet)
-            result.append({"packetNumber": index + 1, "timestamp": datetime.fromtimestamp(float(packet.time), timezone.utc).isoformat(),
-                           "capturedLength": len(packet), "wireLength": getattr(packet, "wirelen", None),
-                           "summary": packet.summary(), "flow": flow, "hex": bytes(packet).hex()})
-    return result
+            raw = bytes(packet)
+            preview = raw[:2048]
+            layers, layer = [], packet
+            # Malformed or deeply encapsulated frames cannot create unbounded output.
+            while not isinstance(layer, NoPayload) and len(layers) < 32:
+                fields = {}
+                for descriptor in layer.fields_desc:
+                    try:
+                        value = layer.getfieldval(descriptor.name)
+                        fields[descriptor.name] = descriptor.i2repr(layer, value)[:256]
+                    except Exception:
+                        fields[descriptor.name] = "unavailable"
+                layers.append({"name": str(layer.name)[:256], "fields": fields})
+                layer = layer.payload
+            arp = packet.getlayer(ARP)
+            fallback = {"srcIp": getattr(arp, "psrc", None), "dstIp": getattr(arp, "pdst", None),
+                        "srcPort": None, "dstPort": None, "protocol": "ARP" if arp is not None else "OTHER"}
+            endpoints = flow or fallback
+            yield {"index": index,
+                   "timestamp": datetime.fromtimestamp(float(packet.time), timezone.utc).isoformat(),
+                   **{key: endpoints[key] for key in ("srcIp", "dstIp", "srcPort", "dstPort", "protocol")},
+                   "length": len(raw), "info": packet.summary()[:1024],
+                   "rawHex": preview.hex(), "ascii": "".join(chr(value) if 32 <= value <= 126 else "." for value in preview),
+                   "layers": layers, "truncated": len(raw) > len(preview),
+                   "communityId": flow["communityId"] if flow else None}

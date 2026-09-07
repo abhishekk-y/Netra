@@ -60,7 +60,7 @@ export function DataTable<T>({
           </tr>
         </thead>
         <tbody className={`divide-y ${isDark ? 'divide-[#222]' : 'divide-slate-50/50'}`}>
-          {data.map((item, idx) => {
+          {data.map((item) => {
             const id = keyExtractor(item);
             const isSelected = selectedId === id;
             return (
@@ -99,3 +99,4 @@ export function DataTable<T>({
     </div>
   );
 }
+

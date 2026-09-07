@@ -53,3 +53,7 @@ docker-data/
 htmlcov/
 .coverage
 .pytest_cache/
+
+.test-artifacts/
+.test-tmp/
+pytest-cache-files-*/

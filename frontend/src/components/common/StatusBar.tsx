@@ -1,6 +1,6 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { useTelemetryStore } from '../../stores/telemetryStore';
-import { formatBytes } from '../../utils/formatters';
+
 
 export const StatusBar: React.FC = () => {
   const telemetry = useTelemetryStore();
@@ -55,3 +55,4 @@ export const StatusBar: React.FC = () => {
     </div>
   );
 };
+

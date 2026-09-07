@@ -8,7 +8,7 @@ from .ingest import packet_flow, preserve_evidence, read_logs, read_pcap
 
 
 def submit(api_url, flows):
-    request = Request(api_url.rstrip("/") + "/api/ingest/flows",
+    request = Request(api_url.rstrip("/") + "/api/v1/ingest/flows",
                       data=json.dumps({"flows": flows}).encode(),
                       headers={"Content-Type": "application/json"}, method="POST")
     with urlopen(request, timeout=30) as response:

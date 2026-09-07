@@ -36,6 +36,7 @@ function App() {
           <Route path="health" element={<HealthPage />} />
           <Route path="deception" element={<DeceptionPage />} />
           <Route path="forensics/replay" element={<ReplayPage />} />
+          <Route path="replay/:id" element={<ReplayPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>

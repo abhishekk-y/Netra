@@ -5,17 +5,15 @@ import type {
 } from '../types';
 
 export const api = axios.create({
-  baseURL: 'http://localhost:8000/api/v1',
+  baseURL: '/api/v1',
   timeout: 10000,
 });
 
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    console.error('API Error:', error);
-    return Promise.reject(error);
-  }
-);
+api.interceptors.request.use(config => {
+  const token = sessionStorage.getItem('netra-api-token');
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
 
 export const apiService = {
   // Dashboard
@@ -44,3 +42,4 @@ export const apiService = {
   // Health
   getHealth: () => api.get<SystemHealth>('/health').then(res => res.data),
 };
+
