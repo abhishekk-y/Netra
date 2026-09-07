@@ -1,5 +1,7 @@
-﻿# Netra-X
+# Netra-X
 ### Network Evolution, Threat Recognition & Attack Forecasting Intelligence System
+
+![Netra-X](docs/assets/netra_header.png)
 
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![React 18](https://img.shields.io/badge/React-18-61DAFB.svg?style=for-the-badge&logo=react&logoColor=black)](https://reactjs.org/)
@@ -12,7 +14,7 @@
 
 **Smart India Hackathon 2026** | **Problem Statement ID: 26153**
 
-Netra is an advanced, AI-driven network intelligence system designed for real-time threat recognition, behavioral anomaly detection, and predictive attack forecasting. It ingests massive scales of network telemetry to build state machines of attacker behavior, projecting potential lateral movement and impact horizons before they occur.
+Netra-X is an enterprise-grade Network Security & Threat Intelligence platform. It replaces traditional signature-based detection with a massive **Deep Learning Ensemble** trained on large-scale network intrusion datasets. The platform features an intense, highly professional Cloudflare/Cisco-style UI designed for Tier 3 SOC Analysts.
 
 ---
 

@@ -11,6 +11,7 @@ import { useUIStore } from '../stores/uiStore';
 export const MainLayout: React.FC = () => {
   const location = useLocation();
   const { theme, toggleTheme } = useUIStore();
+  const [isSidebarHovered, setIsSidebarHovered] = React.useState(false);
 
   useEffect(() => {
     wsService.connect();
@@ -83,31 +84,39 @@ export const MainLayout: React.FC = () => {
       )}
 
       {/* SIDEBAR */}
-      <aside className={`w-[260px] flex flex-col z-50 shrink-0 transition-colors ${
-        theme === 'dark' 
-          ? 'bg-[#050505] border-r border-[#333] shadow-[0_0_30px_rgba(0,0,0,0.9)]' 
-          : 'bg-slate-50/50 backdrop-blur-xl border-r border-slate-200 shadow-sm'
-      }`}>
+      <aside 
+        onMouseEnter={() => setIsSidebarHovered(true)}
+        onMouseLeave={() => setIsSidebarHovered(false)}
+        className={`flex flex-col z-50 shrink-0 transition-all duration-300 ease-in-out ${
+          isSidebarHovered ? 'w-[260px]' : 'w-[80px]'
+        } ${
+          theme === 'dark' 
+            ? 'bg-[#050505] border-r border-[#333] shadow-[0_0_30px_rgba(0,0,0,0.9)]' 
+            : 'bg-slate-50/50 backdrop-blur-xl border-r border-slate-200 shadow-sm'
+        }`}
+      >
         
         {/* Brand Header */}
-        <div className={`h-20 flex items-center justify-between px-6 shrink-0 border-b ${
+        <div className={`h-20 flex items-center px-6 shrink-0 border-b overflow-hidden transition-colors ${
           theme === 'dark' ? 'border-[#333] bg-[#0A0A0A]' : 'border-slate-200/60 bg-transparent'
         }`}>
-          <div className="flex items-center space-x-3">
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${theme === 'dark' ? 'bg-rose-500/20' : 'bg-gradient-to-br from-[#00bceb] to-indigo-500 shadow-sm shadow-[#00bceb]/30'}`}>
+          <div className="flex items-center space-x-3 shrink-0">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${theme === 'dark' ? 'bg-rose-500/20' : 'bg-gradient-to-br from-[#00bceb] to-indigo-500 shadow-sm shadow-[#00bceb]/30'}`}>
               <Cloud size={18} className={theme === 'dark' ? 'text-rose-500' : 'text-white'} />
             </div>
-            <span className={`font-bold text-xl tracking-tight ${theme === 'dark' ? 'text-white font-mono uppercase' : 'text-slate-800 font-sans'}`}>
+            <span className={`font-bold text-xl tracking-tight transition-opacity duration-300 ${isSidebarHovered ? 'opacity-100' : 'opacity-0 hidden'} ${theme === 'dark' ? 'text-white font-mono uppercase' : 'text-slate-800 font-sans'}`}>
               Netra<span className={theme === 'dark' ? 'text-rose-500' : 'text-indigo-500'}>X</span>
             </span>
           </div>
         </div>
 
         {/* Navigation List */}
-        <nav className="flex-1 overflow-y-auto custom-scrollbar pb-6 pt-6 px-4">
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar pb-6 pt-6">
           {navGroups.map((group, idx) => (
-            <div key={idx} className="mb-8">
-              <div className={`px-3 mb-3 text-[11px] font-bold uppercase tracking-widest ${
+            <div key={idx} className="mb-6 px-4">
+              <div className={`mb-3 text-[10px] font-bold uppercase tracking-widest whitespace-nowrap transition-all duration-300 ${
+                isSidebarHovered ? 'opacity-100 px-3' : 'opacity-0 h-0 hidden'
+              } ${
                 theme === 'dark' ? 'text-[#555]' : 'text-slate-400/80'
               }`}>
                 {group.group}
@@ -119,18 +128,21 @@ export const MainLayout: React.FC = () => {
                     <NavLink
                       key={item.path}
                       to={item.path}
-                      className={`flex items-center px-4 py-2.5 rounded-xl transition-all duration-300 group ${
+                      title={!isSidebarHovered ? item.label : undefined}
+                      className={`flex items-center p-3 rounded-xl transition-all duration-300 group ${
                         theme === 'dark' 
                           ? (isActive ? 'bg-[#111] text-white border-l-2 border-rose-500 rounded-none' : 'text-[#888] hover:bg-[#111] hover:text-white')
                           : (isActive ? 'bg-white text-indigo-600 shadow-sm shadow-indigo-100/50 font-semibold' : 'text-slate-500 hover:bg-white/60 hover:text-slate-800')
-                      }`}
+                      } ${!isSidebarHovered && 'justify-center'}`}
                     >
-                      <item.icon size={18} className={`${
+                      <item.icon size={20} className={`${
                         theme === 'dark' 
                           ? (isActive ? 'text-rose-500' : 'text-[#555]') 
                           : (isActive ? 'text-indigo-500' : 'text-slate-400 group-hover:text-slate-600')
                       } shrink-0 transition-colors`} />
-                      <span className={`ml-3 text-sm ${theme === 'dark' ? 'uppercase text-[10px] tracking-widest' : ''}`}>{item.label}</span>
+                      <span className={`ml-3 text-sm whitespace-nowrap transition-all duration-300 ${isSidebarHovered ? 'opacity-100' : 'opacity-0 w-0 hidden'} ${theme === 'dark' ? 'uppercase text-[10px] tracking-widest' : ''}`}>
+                        {item.label}
+                      </span>
                     </NavLink>
                   );
                 })}
